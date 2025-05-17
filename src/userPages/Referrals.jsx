@@ -992,7 +992,7 @@ export default function Referrals() {
           </div>
           <p className="text-slate-400 text-xs sm:text-sm font-geist-mono">
             Manage your stakes in the{" "}
-            <NavLink to="/rewards" className="text-cyan-600 hover:underline">
+            <NavLink to="/dashboard/rewards" className="text-cyan-600 hover:underline">
               Rewards
             </NavLink>{" "}
             section to unstake or compound rewards.
