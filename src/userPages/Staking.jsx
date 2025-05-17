@@ -116,7 +116,7 @@ if (isNaN(chainId) || chainId <= 0) {
   console.error("Staking.jsx: Invalid chain ID:", VITE_CHAIN_ID);
   throw new Error("Invalid chain ID");
 }
-
+console.log(chainId)
 // Utility to format USDT
 const formatUSDT = (value) => {
   if (value === null || value === undefined || value < 0n) return "0.00";
