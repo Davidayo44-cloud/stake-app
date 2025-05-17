@@ -191,7 +191,7 @@ export default function Header() {
 
         {/* Mobile Menu Button */}
         <button
-          className="md:hidden text-slate-200"
+          className="md:hidden text-slate-200 mr-2.5"
           onClick={toggleMenu}
           aria-label="Toggle menu"
           aria-controls="mobile-menu"
