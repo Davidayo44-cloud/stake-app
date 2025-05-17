@@ -166,7 +166,7 @@ const formatUSDT = (value) => {
       console.warn("formatUSDT: Invalid value:", value);
       return "0.00";
     }
-    return Number(ethers.formatUnits(value, USDT_DECIMALS)).toFixed(5);
+    return Number(ethers.formatUnits(value, USDT_DECIMALS)).toFixed(2);
   } catch (err) {
     console.error("formatUSDT error:", err, "Value:", value);
     return "0.00";
@@ -998,12 +998,12 @@ export default function DashboardHome() {
           href="https://t.me/your_admin_support_channel"
           target="_blank"
           rel="noopener noreferrer"
-          className="group flex items-center justify-center px-3 sm:px-4 py-1.5 sm:py-2 bg-slate-800 text-cyan-600 border border-cyan-600 rounded-md hover:bg-slate-700 transition-all duration-300 text-xs sm:text-sm"
+          className="group flex items-center justify-center px-4 sm:px-6 py-2 sm:py-3 bg-cyan-600 text-white border border-cyan-600 rounded-md hover:bg-cyan-500 shadow-md transition-all duration-300 text-xs sm:text-sm"
           data-tooltip-id="telegram-tooltip"
-          data-tooltip-content="Contact admin support on Telegram"
+          data-tooltip-content="Join our Telegram group for admin support"
         >
           <svg
-            className="w-5 h-5 mr-1.5"
+            className="w-6 h-6 mr-1.5"
             viewBox="0 0 24 24"
             xmlns="http://www.w3.org/2000/svg"
           >
@@ -1013,7 +1013,7 @@ export default function DashboardHome() {
               fill="#FFFFFF"
             />
           </svg>
-          Admin Support
+          Click to join our Telegram group
         </a>
       </motion.div>
 
