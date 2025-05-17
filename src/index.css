@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+
+
+:root {
+  --font-geist-sans: 'Geist Sans', sans-serif;
+  --font-geist-mono: 'Geist Mono', monospace;
+  --font-poppins: "Roboto", sans-serif
+}
+
+body {
+  font-family: var(--font-poppins);
+  background-color: #0f172a; /* bg-slate-900 */
+  color: #e2e8f0; /* text-slate-200 */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.font-geist {
+  font-family: var(--font-geist-sans);
+}
+
+.font-geist-mono {
+  font-family: var(--font-geist-mono);
+}
