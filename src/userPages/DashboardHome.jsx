@@ -32,7 +32,7 @@ import {
 import { getContract, defineChain } from "thirdweb";
 import { createThirdwebClient } from "thirdweb";
 import { ethers } from "ethers";
-import { MockUSDTABI, StakingContractABI } from "../config/abis";
+import { MockUSDTABI, USDTABI,StakingContractABI } from "../config/abis";
 
 // Register Chart.js components
 ChartJS.register(
@@ -147,7 +147,7 @@ const usdtContract = getContract({
   client,
   chain: hardhatChain,
   address: VITE_USDT_ADDRESS,
-  abi: MockUSDTABI,
+  abi: USDTABI,
   rpcOverride: VITE_RPC_URL,
 });
 
