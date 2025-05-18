@@ -995,7 +995,7 @@ export default function DashboardHome() {
           <ArrowRight className="ml-1.5 w-4 h-4 transform group-hover:translate-x-1 transition-transform duration-300" />
         </NavLink>
         <a
-          href="https://t.me/your_admin_support_channel"
+          href="https://t.me/stakerpro2"
           target="_blank"
           rel="noopener noreferrer"
           className="group flex items-center justify-center px-4 sm:px-6 py-2 sm:py-3 bg-cyan-600 text-white border border-cyan-600 rounded-md hover:bg-cyan-500 shadow-md transition-all duration-300 text-xs sm:text-sm"

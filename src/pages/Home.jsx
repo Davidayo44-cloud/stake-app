@@ -405,120 +405,138 @@ export default function Home() {
 
       {/* CTA Section */}
       <section className="relative py-16 sm:py-20 bg-gradient-to-b from-cyan-700/10 to-transparent overflow-hidden">
-  <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22 viewBox=%220 0 40 40%22%3E%3Ccircle cx=%2220%22 cy=%2220%22 r=%222%22 fill=%22rgba(14,116,144,0.2)%22/%3E%3C/svg%3E')] opacity-30" />
-  <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-    <motion.div
-      initial={{ opacity: 0, y: 50, scale: 0.95 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.6 }}
-      className="relative bg-slate-800/40 backdrop-blur-sm p-8 sm:p-12 rounded-3xl border border-cyan-700/30 shadow-inner hover:shadow-[0_0_20px_rgba(14,116,144,0.3)] transition-all duration-300 group"
-      style={{ transformStyle: "preserve-3d" }}
-    >
-      <div className="absolute inset-0 bg-gradient-to-r from-cyan-700/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 animate-pulse" style={{ zIndex: -1 }} />
-      <ArrowRightCircle
-        className="w-12 h-12 sm:w-16 sm:h-16 text-cyan-600 mx-auto mb-6"
-        aria-hidden="true"
-      />
-      <motion.p
-        initial={{ opacity: 0, y: 50 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.2 }}
-        className="text-base sm:text-lg font-semibold text-cyan-600 mb-4 font-geist-mono"
-      >
-        Earn 13% APY in just 5 days
-      </motion.p>
-      <motion.h2
-        initial={{ opacity: 0, y: 50, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.6, delay: 0.4 }}
-        className="text-2xl md:text-3xl font-extrabold mb-6 text-slate-200 font-geist hover:text-shadow-[0_0_10px_rgba(14,116,144,0.5)] transition-all duration-300"
-      >
-        Start Staking Today
-      </motion.h2>
-      <motion.p
-        initial={{ opacity: 0, y: 50 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.6 }}
-        className="text-lg sm:text-xl mb-8 max-w-lg sm:max-w-xl mx-auto font-medium font-geist text-slate-300"
-      >
-        Join thousands of users growing their wealth with StakePro’s secure platform.
-      </motion.p>
-      <motion.div
-        initial={{ opacity: 0, y: 50 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.8 }}
-        className="flex flex-col sm:flex-row justify-center gap-4 sm:gap-6"
-      >
-        {account ? (
-          <motion.div whileTap={{ scale: 0.95 }} className="relative z-10">
-            <Link
-              to="/dashboard"
-              className="inline-flex items-center px-4 py-3 bg-slate-800 text-cyan-600 border border-cyan-600 rounded-md font-medium text-sm transition-all duration-300 hover:bg-slate-700 touch-manipulation"
-              aria-label="Navigate to staking dashboard"
-              aria-describedby="cta-description"
-            >
-              Go to Dashboard
-              <ArrowRight className="ml-2 w-4 h-4 transform group-hover:translate-x-1 transition-transform duration-300" />
-            </Link>
-          </motion.div>
-        ) : (
-          <motion.div whileTap={{ scale: 0.95 }} className="relative z-10">
-            <ConnectButton
-              client={client}
-              wallets={wallets}
-              connectButton={{
-                label: (
-                  <span className="group flex items-center text-cyan-600 text-sm font-medium transition-colors duration-300">
-                    Get Started
-                    <ArrowRight className="ml-2 w-4 h-4 transform group-hover:translate-x-1 transition-transform duration-300" />
-                  </span>
-                ),
-                style: {
-                  background: "#1e293b",
-                  color: "#06b6d4",
-                  border: "1px solid #06b6d4",
-                  padding: "0.75rem 1.5rem",
-                  borderRadius: "0.375rem",
-                  transition: "all 0.3s ease",
-                  touchAction: "manipulation",
-                },
-                className:
-                  "bg-slate-800 text-cyan-600 border border-cyan-600 px-4 py-3 rounded-md font-medium text-sm transition-all duration-300 hover:bg-slate-700 flex items-center justify-center touch-manipulation",
-              }}
-              connectModal={{ size: "compact", title: "Connect to StakePro", showThirdwebBranding: false }}
-              theme="dark"
-            />
-          </motion.div>
-        )}
-        <motion.div whileTap={{ scale: 0.95 }} className="relative z-10">
-          <a
-            href="https://t.me/your_admin_support_channel"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center px-4 py-3 bg-slate-800 text-cyan-600 border border-cyan-600 rounded-md font-medium text-sm transition-all duration-300 hover:bg-slate-700 touch-manipulation"
-            aria-label="Learn more about StakePro"
-            aria-describedby="cta-description"
+        <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22 viewBox=%220 0 40 40%22%3E%3Ccircle cx=%2220%22 cy=%2220%22 r=%222%22 fill=%22rgba(14,116,144,0.2)%22/%3E%3C/svg%3E')] opacity-30" />
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.6 }}
+            className="relative bg-slate-800/40 backdrop-blur-sm p-8 sm:p-12 rounded-3xl border border-cyan-700/30 shadow-inner hover:shadow-[0_0_20px_rgba(14,116,144,0.3)] transition-all duration-300 group"
+            style={{ transformStyle: "preserve-3d" }}
           >
-            Learn More
-            <ArrowRight className="ml-2 w-4 h-4 transform group-hover:translate-x-1 transition-transform duration-300" />
-          </a>
-        </motion.div>
-      </motion.div>
-      <motion.div
-        initial={{ opacity: 0, y: 50 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 1.0 }}
-        className="flex justify-center items-center gap-2 mt-8 text-base sm:text-lg text-slate-400 font-geist"
-      >
-        <ShieldCheck className="w-5 h-5 text-cyan-600" aria-hidden="true" />
-        <span>Trusted by thousands of users | Audited by SecureDeFi</span>
-      </motion.div>
-      <div id="cta-description" className="sr-only">
-        Start staking USDT to earn 13% rewards or learn more about StakePro’s secure platform.
-      </div>
-    </motion.div>
-  </div>
-</section>
+            <div
+              className="absolute inset-0 bg-gradient-to-r from-cyan-700/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 animate-pulse"
+              style={{ zIndex: -1 }}
+            />
+            <ArrowRightCircle
+              className="w-12 h-12 sm:w-16 sm:h-16 text-cyan-600 mx-auto mb-6"
+              aria-hidden="true"
+            />
+            <motion.p
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              className="text-base sm:text-lg font-semibold text-cyan-600 mb-4 font-geist-mono"
+            >
+              Earn 13% APY in just 5 days
+            </motion.p>
+            <motion.h2
+              initial={{ opacity: 0, y: 50, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.6, delay: 0.4 }}
+              className="text-2xl md:text-3xl font-extrabold mb-6 text-slate-200 font-geist hover:text-shadow-[0_0_10px_rgba(14,116,144,0.5)] transition-all duration-300"
+            >
+              Start Staking Today
+            </motion.h2>
+            <motion.p
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.6 }}
+              className="text-lg sm:text-xl mb-8 max-w-lg sm:max-w-xl mx-auto font-medium font-geist text-slate-300"
+            >
+              Join thousands of users growing their wealth with StakePro’s
+              secure platform.
+            </motion.p>
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.8 }}
+              className="flex flex-col sm:flex-row justify-center gap-4 sm:gap-6"
+            >
+              {account ? (
+                <motion.div
+                  whileTap={{ scale: 0.95 }}
+                  className="relative z-10"
+                >
+                  <Link
+                    to="/dashboard"
+                    className="inline-flex items-center px-4 py-3 bg-slate-800 text-cyan-600 border border-cyan-600 rounded-md font-medium text-sm transition-all duration-300 hover:bg-slate-700 touch-manipulation"
+                    aria-label="Navigate to staking dashboard"
+                    aria-describedby="cta-description"
+                  >
+                    Go to Dashboard
+                    <ArrowRight className="ml-2 w-4 h-4 transform group-hover:translate-x-1 transition-transform duration-300" />
+                  </Link>
+                </motion.div>
+              ) : (
+                <motion.div
+                  whileTap={{ scale: 0.95 }}
+                  className="relative z-10"
+                >
+                  <ConnectButton
+                    client={client}
+                    wallets={wallets}
+                    connectButton={{
+                      label: (
+                        <span className="group flex items-center text-cyan-600 text-sm font-medium transition-colors duration-300">
+                          Get Started
+                          <ArrowRight className="ml-2 w-4 h-4 transform group-hover:translate-x-1 transition-transform duration-300" />
+                        </span>
+                      ),
+                      style: {
+                        background: "#1e293b",
+                        color: "#06b6d4",
+                        border: "1px solid #06b6d4",
+                        padding: "0.75rem 1.5rem",
+                        borderRadius: "0.375rem",
+                        transition: "all 0.3s ease",
+                        touchAction: "manipulation",
+                      },
+                      className:
+                        "bg-slate-800 text-cyan-600 border border-cyan-600 px-4 py-3 rounded-md font-medium text-sm transition-all duration-300 hover:bg-slate-700 flex items-center justify-center touch-manipulation",
+                    }}
+                    connectModal={{
+                      size: "compact",
+                      title: "Connect to StakePro",
+                      showThirdwebBranding: false,
+                    }}
+                    theme="dark"
+                  />
+                </motion.div>
+              )}
+              <motion.div whileTap={{ scale: 0.95 }} className="relative z-10">
+                <a
+                  href="https://t.me/stakerpro2"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center px-4 py-3 bg-slate-800 text-cyan-600 border border-cyan-600 rounded-md font-medium text-sm transition-all duration-300 hover:bg-slate-700 touch-manipulation"
+                  aria-label="Learn more about StakePro"
+                  aria-describedby="cta-description"
+                >
+                  Learn More
+                  <ArrowRight className="ml-2 w-4 h-4 transform group-hover:translate-x-1 transition-transform duration-300" />
+                </a>
+              </motion.div>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 1.0 }}
+              className="flex justify-center items-center gap-2 mt-8 text-base sm:text-lg text-slate-400 font-geist"
+            >
+              <ShieldCheck
+                className="w-5 h-5 text-cyan-600"
+                aria-hidden="true"
+              />
+              <span>Trusted by thousands of users | Audited by SecureDeFi</span>
+            </motion.div>
+            <div id="cta-description" className="sr-only">
+              Start staking USDT to earn 13% rewards or learn more about
+              StakePro’s secure platform.
+            </div>
+          </motion.div>
+        </div>
+      </section>
       {/* Footer */}
       <footer className="relative py-16 sm:py-20 bg-gradient-to-b from-cyan-700/10 to-transparent">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22 viewBox=%220 0 40 40%22%3E%3Ccircle cx=%2220%22 cy=%2220%22 r=%222%22 fill=%22rgba(14,116,144,0.2)%22/%3E%3C/svg%3E')] opacity-30" />
