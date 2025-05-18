@@ -1465,7 +1465,7 @@ export default function Staking() {
                 value={approveAmount}
                 onChange={(e) => setApproveAmount(e.target.value)}
                 placeholder="Enter amount to approve"
-                className={`w-full px-2 sm:px-3 py-1.5 sm:py-2 bg-slate-800 border ${
+                className={`w-full px-2 sm:px-3 py-4 sm:py-4 bg-slate-800 border ${
                   isApproveAmountValid ? "border-cyan-600" : "border-red-500"
                 } rounded-md text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-600 text-xs sm:text-sm font-geist-mono`}
               />
@@ -1489,7 +1489,7 @@ export default function Staking() {
               }`}
             >
               Approve
-              <ArrowRight className="ml-1 sm:ml-2 w-3 sm:w-4 h-3 sm:h-4 transform group-hover:translate-x-1 transition-transform duration-300" />
+              <ArrowRight className="ml-1 sm:ml-2 w-3 sm:w-4 h-5 sm:h-5 transform group-hover:translate-x-1 transition-transform duration-300" />
             </button>
             <div>
               <label className="block text-xs sm:text-sm text-slate-400 font-geist-mono mb-1">
@@ -1500,7 +1500,7 @@ export default function Staking() {
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="Enter amount to stake"
-                className={`w-full px-2 sm:px-3 py-1.5 sm:py-2 bg-slate-800 border ${
+                className={`w-full px-2 sm:px-3 py-4 sm:py-4 bg-slate-800 border ${
                   isAmountValid ? "border-cyan-600" : "border-red-500"
                 } rounded-md text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-600 text-xs sm:text-sm font-geist-mono`}
               />
@@ -1541,7 +1541,7 @@ export default function Staking() {
               }`}
             >
               Stake
-              <ArrowRight className="ml-1 sm:ml-2 w-3 sm:w-4 h-3 sm:h-4 transform group-hover:translate-x-1 transition-transform duration-300" />
+              <ArrowRight className="ml-1 sm:ml-2 w-3 sm:w-4 h-5 sm:h-5 transform group-hover:translate-x-1 transition-transform duration-300" />
             </button>
           </div>
         </motion.div>
