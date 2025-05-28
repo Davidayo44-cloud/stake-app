@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { Transak } from "@transak/transak-sdk";
 import { useActiveAccount } from "thirdweb/react";
 import {
   createThirdwebClient,
@@ -177,6 +178,8 @@ export default function Staking() {
     StakingContractABI,
     provider
   );
+
+ 
 
   // Handle referral logic
   useEffect(() => {
@@ -828,7 +831,7 @@ export default function Staking() {
         );
       }
 
-      const minBnbRequired = ethers.parseEther("0.001");
+      const minBnbRequired = ethers.parseEther("0.00015");
       if (bnbBalance < minBnbRequired) {
         throw new Error(
           `Insufficient BNB for gas fees: ${ethers.formatEther(
@@ -1452,6 +1455,7 @@ export default function Staking() {
           transition={{ duration: 0.5, delay: 0.1 }}
           className="bg-slate-800/40 backdrop-blur-sm p-3 sm:p-4 md:p-6 rounded-2xl border border-cyan-700/30 w-full"
         >
+         
           <h3 className="text-base sm:text-lg md:text-xl font-bold text-slate-200 mb-2 sm:mb-4 font-geist">
             Approve & Stake USDT
           </h3>

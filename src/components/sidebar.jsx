@@ -8,6 +8,7 @@ import {
   Users,
   ArrowLeft,
   ArrowRight,
+  BadgeDollarSign,
 } from "lucide-react";
 
 export default function Sidebar({
@@ -21,6 +22,7 @@ export default function Sidebar({
     { href: "/dashboard/staking", label: "Staking", icon: DollarSign },
     { href: "/dashboard/rewards", label: "Rewards", icon: Gift },
     { href: "/dashboard/referrals", label: "Referrals", icon: Users },
+    // { href: "/dashboard/buy", label: "Buy", icon: BadgeDollarSign },
   ];
 
   const handleToggleCollapse = () => {

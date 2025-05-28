@@ -12,6 +12,8 @@ import { AdminLayout } from "./AdminLayout";
 import { AdminHome } from "./adminPages/Home";
 import { ManagePool } from "./adminPages/ManagePool";
 import { ContractControls } from "./adminPages/ContractControls";
+import BuyCrypto from "./userPages/BuyCrypto";
+import NotFound from "./pages/NotFound";
 
 // Validate environment variables
 const requiredEnvVars = {
@@ -110,12 +112,14 @@ export default function App() {
             <Route path="staking" element={<Staking />} />
             <Route path="referrals" element={<Referrals />} />
             <Route path="rewards" element={<Rewards />} />
+            {/* <Route path="buy" element={<BuyCrypto />} /> */}
           </Route>
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminHome />} />
             <Route path="manage-pool" element={<ManagePool />} />
             <Route path="controls" element={<ContractControls />} />
           </Route>
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </div>
     </ThirdwebProvider>
