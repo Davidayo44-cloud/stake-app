@@ -165,7 +165,7 @@ export default function Home() {
                 className="headline md:text-5xl"
                 aria-label="Stake USDT to earn 13% rewards"
               >
-                Stake USDT, Earn 13% Rewards!
+                Stake USDT, Earn 20% Rewards!
               </motion.h1>
               <motion.p
                 initial={{ opacity: 0, y: 50 }}
@@ -245,7 +245,7 @@ export default function Home() {
                 <span>Powered by Binance</span>
               </motion.div>
               <div id="hero-description" className="sr-only">
-                Connect your wallet to stake USDT and earn 13% rewards on our
+                Connect your wallet to stake USDT and earn 20% rewards on our
                 secure platform.
               </div>
             </motion.div>
@@ -353,7 +353,7 @@ export default function Home() {
                 icon: DollarSign,
                 title: "High Rewards",
                 description:
-                  "Earn 13% rewards by staking USDT for just 5 days.",
+                  "Earn 20% rewards by staking USDT for just 5 days.",
                 tooltip: "13% APY",
               },
               {
@@ -428,7 +428,7 @@ export default function Home() {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="text-base sm:text-lg font-semibold text-cyan-600 mb-4 font-geist-mono"
             >
-              Earn 13% APY in just 5 days
+              Earn 20% APY in just 5 days
             </motion.p>
             <motion.h2
               initial={{ opacity: 0, y: 50, scale: 0.95 }}
