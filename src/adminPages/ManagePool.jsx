@@ -871,7 +871,7 @@ export function ManagePool() {
         place="top"
         className="bg-slate-800 text-cyan-600 font-geist-mono text-xs"
       />
-      <Toaster position="top-right" />
+    
     </div>
   );
 }

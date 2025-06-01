@@ -232,7 +232,21 @@ export function AdminLayout() {
           <Outlet />
         </motion.main>
       </div>
-      <Toaster position="top-right" />
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          style: {
+            background: "#1e293b",
+            color: "#e2e8f0",
+            border: "1px solid #22d3ee",
+            fontFamily: "Geist, sans-serif",
+            fontSize: "14px",
+            borderRadius: "8px",
+          },
+          success: { style: { borderColor: "#14b8a6" } },
+          error: { style: { borderColor: "#f43f5e" } },
+        }}
+      />
     </div>
   );
 }

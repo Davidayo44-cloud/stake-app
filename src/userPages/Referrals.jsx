@@ -40,6 +40,7 @@ const requiredEnvVars = {
   VITE_NATIVE_CURRENCY_DECIMALS: import.meta.env.VITE_NATIVE_CURRENCY_DECIMALS,
   VITE_STAKING_DEPLOYMENT_BLOCK: import.meta.env.VITE_STAKING_DEPLOYMENT_BLOCK,
   VITE_USDT_DECIMALS: import.meta.env.VITE_USDT_DECIMALS,
+  VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
 };
 
 const missingEnvVars = Object.entries(requiredEnvVars)
@@ -47,15 +48,8 @@ const missingEnvVars = Object.entries(requiredEnvVars)
   .map(([key]) => key);
 
 if (missingEnvVars.length > 0) {
-  console.error(
-    "Referrals.jsx: Missing environment variables:",
-    missingEnvVars
-  );
-  throw new Error(
-    `Missing environment variables: ${missingEnvVars.join(
-      ", "
-    )}. Please check your .env file.`
-  );
+  console.error("Referrals.jsx: Missing environment variables:", missingEnvVars);
+  throw new Error(`Missing environment variables: ${missingEnvVars.join(", ")}. Please check your .env file.`);
 }
 
 const {
@@ -70,21 +64,16 @@ const {
   VITE_NATIVE_CURRENCY_DECIMALS,
   VITE_STAKING_DEPLOYMENT_BLOCK,
   VITE_USDT_DECIMALS,
+  VITE_API_BASE_URL,
 } = requiredEnvVars;
 
 // Validate contract addresses
 if (!ethers.isAddress(VITE_USDT_ADDRESS)) {
-  console.error(
-    "Referrals.jsx: Invalid USDT contract address:",
-    VITE_USDT_ADDRESS
-  );
+  console.error("Referrals.jsx: Invalid USDT contract address:", VITE_USDT_ADDRESS);
   throw new Error("Invalid USDT contract address");
 }
 if (!ethers.isAddress(VITE_STAKING_ADDRESS)) {
-  console.error(
-    "Referrals.jsx: Invalid Staking contract address:",
-    VITE_STAKING_ADDRESS
-  );
+  console.error("Referrals.jsx: Invalid Staking contract address:", VITE_STAKING_ADDRESS);
   throw new Error("Invalid Staking contract address");
 }
 
@@ -98,10 +87,7 @@ if (isNaN(chainId) || chainId <= 0) {
 // Validate native currency decimals
 const nativeCurrencyDecimals = parseInt(VITE_NATIVE_CURRENCY_DECIMALS, 10);
 if (isNaN(nativeCurrencyDecimals) || nativeCurrencyDecimals < 0) {
-  console.error(
-    "Referrals.jsx: Invalid native currency decimals:",
-    VITE_NATIVE_CURRENCY_DECIMALS
-  );
+  console.error("Referrals.jsx: Invalid native currency decimals:", VITE_NATIVE_CURRENCY_DECIMALS);
   throw new Error("Invalid native currency decimals");
 }
 
@@ -113,20 +99,16 @@ if (isNaN(USDT_DECIMALS) || USDT_DECIMALS < 0) {
 }
 
 // Validate deployment block
-const DEPLOYMENT_BLOCK =
-  parseInt(VITE_STAKING_DEPLOYMENT_BLOCK, 10) || 48000000; // Assumed, verify via BscScan
+const DEPLOYMENT_BLOCK = parseInt(VITE_STAKING_DEPLOYMENT_BLOCK, 10) || 48000000;
 if (isNaN(DEPLOYMENT_BLOCK) || DEPLOYMENT_BLOCK < 0) {
-  console.error(
-    "Referrals.jsx: Invalid staking deployment block:",
-    VITE_STAKING_DEPLOYMENT_BLOCK
-  );
+  console.error("Referrals.jsx: Invalid staking deployment block:", VITE_STAKING_DEPLOYMENT_BLOCK);
   throw new Error("Invalid staking deployment block");
 }
 
 // Define Hardhat chain
 const hardhatChain = defineChain({
   id: chainId,
-  rpc: VITE_RPC_URL, // https://bsc-dataseed1.ninicoin.io/
+  rpc: VITE_RPC_URL,
   nativeCurrency: {
     name: VITE_NATIVE_CURRENCY_NAME,
     symbol: VITE_NATIVE_CURRENCY_SYMBOL,
@@ -159,6 +141,59 @@ const provider = new ethers.JsonRpcProvider(VITE_RPC_URL);
 const MIN_REFERRAL_WITHDRAWAL = BigInt(5 * 10 ** USDT_DECIMALS); // 5 USDT
 const REFERRAL_BONUS = BigInt(0.5 * 10 ** USDT_DECIMALS); // 0.5 USDT
 const DAY_IN_SECONDS = 86400;
+
+// Check suspension status
+const checkSuspensionStatus = async (userAddress) => {
+  if (!ethers.isAddress(userAddress)) {
+    console.error("Referrals.jsx: Invalid user address:", userAddress);
+    return { isSuspended: false, reason: null };
+  }
+
+  const maxRetries = 3;
+  const retryDelay = 1000; // 1 second
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log("Fetching suspension status for:", `${VITE_API_BASE_URL}/api/check-suspension/${userAddress.toLowerCase()}`);
+      const response = await fetch(`${VITE_API_BASE_URL}/api/check-suspension/${userAddress.toLowerCase()}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Referrals.jsx: Suspension check error", {
+          status: response.status,
+          errorText,
+          attempt,
+        });
+        if (response.status === 404) {
+          console.warn("Suspension API endpoint not found. Check server route: /api/check-suspension/:address");
+        }
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("Referrals.jsx: Suspension status fetched", data);
+      return data; // { isSuspended: boolean, reason: string, suspendedAt: Date }
+    } catch (err) {
+      console.error("Referrals.jsx: Failed to check suspension status:", {
+        message: err.message,
+        stack: err.stack,
+        attempt,
+      });
+
+      if (attempt === maxRetries) {
+        console.warn("Referrals.jsx: Max retries reached for suspension check");
+        return { isSuspended: false, reason: null }; // Default to not suspended
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+    }
+  }
+};
 
 // Custom debounce
 const debounce = (func, wait) => {
@@ -210,9 +245,7 @@ function ErrorFallback({ error }) {
   return (
     <div className="flex items-center justify-center bg-slate-900 p-4 text-slate-200 w-full min-w-0">
       <div className="text-center">
-        <h2 className="text-xl sm:text-2xl font-bold mb-4">
-          Something went wrong
-        </h2>
+        <h2 className="text-xl sm:text-2xl font-bold mb-4">Something went wrong</h2>
         <p>{error.message}</p>
         <button
           onClick={() => window.location.reload()}
@@ -240,9 +273,7 @@ const withRetry = async (fn, retries = 3, delay = 200) => {
 // Check transaction status
 const checkTransactionStatus = async (txHash) => {
   try {
-    const receipt = await withRetry(() =>
-      provider.getTransactionReceipt(txHash)
-    );
+    const receipt = await withRetry(() => provider.getTransactionReceipt(txHash));
     if (receipt && receipt.status === 1) {
       console.log("Transaction Confirmed:", txHash);
       return true;
@@ -269,6 +300,7 @@ export default function Referrals() {
   const [pendingTx, setPendingTx] = useState(null);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const [isSuspended, setIsSuspended] = useState({ isSuspended: false, reason: null });
 
   // Contract data hooks
   const {
@@ -335,6 +367,23 @@ export default function Referrals() {
     },
   });
 
+  // Check suspension status on mount
+  useEffect(() => {
+    ReactModal.setAppElement("#root");
+    setTimeout(() => setIsLoading(false), 1500);
+
+    if (account?.address && ethers.isAddress(account.address)) {
+      checkSuspensionStatus(account.address)
+        .then((suspension) => {
+          setIsSuspended(suspension);
+        })
+        .catch((err) => {
+          console.error("Referrals.jsx: Initial suspension check failed:", err);
+          setIsSuspended({ isSuspended: false, reason: null });
+        });
+    }
+  }, [account]);
+
   // Handle referral logic
   useEffect(() => {
     console.log("Checking referral parameters, account:", account?.address);
@@ -350,19 +399,11 @@ export default function Referrals() {
     }
 
     const storedReferrer = localStorage.getItem("referrerAddress");
-    if (
-      refAddress &&
-      ethers.isAddress(refAddress) &&
-      refAddress !== account.address
-    ) {
+    if (refAddress && ethers.isAddress(refAddress) && refAddress !== account.address) {
       console.log("Setting referrer from URL:", refAddress);
       localStorage.removeItem("referrerAddress");
       navigate("/dashboard/staking");
-    } else if (
-      storedReferrer &&
-      ethers.isAddress(storedReferrer) &&
-      storedReferrer !== account.address
-    ) {
+    } else if (storedReferrer && ethers.isAddress(storedReferrer) && storedReferrer !== account.address) {
       console.log("Setting referrer from localStorage:", storedReferrer);
       localStorage.removeItem("referrerAddress");
       navigate("/dashboard/staking");
@@ -372,26 +413,12 @@ export default function Referrals() {
   // Fetch referrals
   const fetchReferrals = async (accountAddress) => {
     if (!accountAddress || !ethers.isAddress(accountAddress)) return [];
-    const contract = new ethers.Contract(
-      VITE_STAKING_ADDRESS,
-      StakingContractABI,
-      provider
-    );
+    const contract = new ethers.Contract(VITE_STAKING_ADDRESS, StakingContractABI, provider);
     try {
       console.log("Fetching referrals for:", accountAddress);
-      const referrerFilter = contract.filters.ReferralRecorded(
-        accountAddress,
-        null
-      );
-      const referrerEvents = await withRetry(() =>
-        contract.queryFilter(referrerFilter, DEPLOYMENT_BLOCK, "latest")
-      );
-      console.log(
-        "Raw Referrer Events for",
-        accountAddress,
-        ":",
-        referrerEvents
-      );
+      const referrerFilter = contract.filters.ReferralRecorded(accountAddress, null);
+      const referrerEvents = await withRetry(() => contract.queryFilter(referrerFilter, DEPLOYMENT_BLOCK, "latest"));
+      console.log("Raw Referrer Events for", accountAddress, ":", referrerEvents);
       console.log(
         "Processed Referrer Events for",
         accountAddress,
@@ -404,13 +431,8 @@ export default function Referrals() {
         }))
       );
 
-      const refereeFilter = contract.filters.ReferralRecorded(
-        null,
-        accountAddress
-      );
-      const refereeEvents = await withRetry(() =>
-        contract.queryFilter(refereeFilter, DEPLOYMENT_BLOCK, "latest")
-      );
+      const refereeFilter = contract.filters.ReferralRecorded(null, accountAddress);
+      const refereeEvents = await withRetry(() => contract.queryFilter(refereeFilter, DEPLOYMENT_BLOCK, "latest"));
       console.log(
         "Processed Referee Events where",
         accountAddress,
@@ -423,35 +445,20 @@ export default function Referrals() {
         }))
       );
 
-      const blockPromises = referrerEvents.map((event) =>
-        provider.getBlock(event.blockNumber)
-      );
+      const blockPromises = referrerEvents.map((event) => provider.getBlock(event.blockNumber));
       const blocks = await Promise.all(blockPromises);
       const referralsData = referrerEvents
         .map((event, index) => ({
-          address: `${event.args.referee.slice(
-            0,
-            6
-          )}...${event.args.referee.slice(-4)}`,
+          address: `${event.args.referee.slice(0, 6)}...${event.args.referee.slice(-4)}`,
           fullAddress: event.args.referee,
           referrer: event.args.referrer,
-          timestamp: new Date(blocks[index].timestamp * 1000)
-            .toISOString()
-            .split("T")[0],
+          timestamp: new Date(blocks[index].timestamp * 1000).toISOString().split("T")[0],
           bonus: REFERRAL_BONUS,
         }))
-        .filter(
-          (referral) =>
-            referral.referrer.toLowerCase() === accountAddress.toLowerCase()
-        )
+        .filter((referral) => referral.referrer.toLowerCase() === accountAddress.toLowerCase())
         .reverse()
         .slice(0, 10);
-      console.log(
-        "Final Referrals Data for",
-        accountAddress,
-        ":",
-        referralsData
-      );
+      console.log("Final Referrals Data for", accountAddress, ":", referralsData);
       return referralsData;
     } catch (err) {
       console.error("Referrals.jsx: fetchReferrals error:", err);
@@ -463,29 +470,16 @@ export default function Referrals() {
   // Fetch withdrawal history
   const fetchWithdrawalHistory = async (accountAddress) => {
     if (!accountAddress || !ethers.isAddress(accountAddress)) return [];
-    const contract = new ethers.Contract(
-      VITE_STAKING_ADDRESS,
-      StakingContractABI,
-      provider
-    );
+    const contract = new ethers.Contract(VITE_STAKING_ADDRESS, StakingContractABI, provider);
     try {
-      const filter = contract.filters.MetaReferralBonusWithdrawn(
-        accountAddress,
-        null
-      );
-      const events = await withRetry(() =>
-        contract.queryFilter(filter, DEPLOYMENT_BLOCK, "latest")
-      );
-      const blockPromises = events.map((event) =>
-        provider.getBlock(event.blockNumber)
-      );
+      const filter = contract.filters.MetaReferralBonusWithdrawn(accountAddress, null);
+      const events = await withRetry(() => contract.queryFilter(filter, DEPLOYMENT_BLOCK, "latest"));
+      const blockPromises = events.map((event) => provider.getBlock(event.blockNumber));
       const blocks = await Promise.all(blockPromises);
       return events
         .map((event, index) => ({
           amount: BigInt(event.args.amount),
-          timestamp: new Date(blocks[index].timestamp * 1000)
-            .toISOString()
-            .split("T")[0],
+          timestamp: new Date(blocks[index].timestamp * 1000).toISOString().split("T")[0],
           txHash: event.transactionHash,
         }))
         .reverse()
@@ -504,11 +498,7 @@ export default function Referrals() {
       console.error("Referrals.jsx: Invalid account address:", accountAddress);
       throw new Error("Invalid account address");
     }
-    const contract = new ethers.Contract(
-      VITE_STAKING_ADDRESS,
-      StakingContractABI,
-      provider
-    );
+    const contract = new ethers.Contract(VITE_STAKING_ADDRESS, StakingContractABI, provider);
     const stakesData = [];
     try {
       for (let i = 0; i < count; i++) {
@@ -516,8 +506,7 @@ export default function Referrals() {
         const amount = BigInt(stake.amount);
         const startTimestamp = BigInt(stake.startTimestamp);
         const currentTime = BigInt(Math.floor(Date.now() / 1000));
-        const isActive =
-          currentTime < startTimestamp + BigInt(5 * DAY_IN_SECONDS);
+        const isActive = currentTime < startTimestamp + BigInt(5 * DAY_IN_SECONDS);
         stakesData.push({ id: i, amount, isActive });
       }
     } catch (err) {
@@ -552,9 +541,7 @@ export default function Referrals() {
         }
         const referralsData = await fetchReferrals(account.address);
         setReferrals(referralsData);
-        const withdrawalHistoryData = await fetchWithdrawalHistory(
-          account.address
-        );
+        const withdrawalHistoryData = await fetchWithdrawalHistory(account.address);
         setWithdrawalHistory(withdrawalHistoryData);
       }
       setIsLoading(false);
@@ -569,7 +556,6 @@ export default function Referrals() {
 
   // Data fetching and error handling
   useEffect(() => {
-    ReactModal.setAppElement("#root");
     debouncedUpdateData();
     const interval = setInterval(debouncedUpdateData, 30000);
     console.log("Started data update interval");
@@ -591,9 +577,7 @@ export default function Referrals() {
   useEffect(() => {
     if (referralBonusError) {
       console.error("Referrals.jsx: referralBonusError:", referralBonusError);
-      toast.error(
-        `Failed to fetch referral bonus: ${referralBonusError.message}`
-      );
+      toast.error(`Failed to fetch referral bonus: ${referralBonusError.message}`);
       setError(referralBonusError);
     }
     if (stakeCountError) {
@@ -611,19 +595,12 @@ export default function Referrals() {
       toast.error(`Failed to fetch USDT balance: ${usdtBalanceError.message}`);
       setError(usdtBalanceError);
     }
-  }, [
-    referralBonusError,
-    stakeCountError,
-    stakingNonceError,
-    usdtBalanceError,
-  ]);
+  }, [referralBonusError, stakeCountError, stakingNonceError, usdtBalanceError]);
 
   // Copy referral link
   const handleCopyReferralLink = async () => {
     try {
-      const link = `${window.location.origin}/dashboard/staking?ref=${
-        account?.address || "0x0"
-      }`;
+      const link = `${window.location.origin}/dashboard/staking?ref=${account?.address || "0x0"}`;
       await navigator.clipboard.writeText(link);
       toast.success("Referral link copied!", { position: "top-right" });
     } catch (err) {
@@ -633,12 +610,7 @@ export default function Referrals() {
   };
 
   // Gasless transaction handler
-  const handleGaslessTransaction = async ({
-    functionName,
-    primaryType,
-    nonce,
-    deadline,
-  }) => {
+  const handleGaslessTransaction = async ({ functionName, primaryType, nonce, deadline }) => {
     if (!account || !wallet) {
       throw new Error("Please connect your wallet");
     }
@@ -684,43 +656,46 @@ export default function Referrals() {
       throw new Error("Failed to sign transaction: " + signErr.message);
     }
     try {
-      const recovered = ethers.verifyTypedData(
-        domain,
-        types,
-        message,
-        signature
-      );
+      const recovered = ethers.verifyTypedData(domain, types, message, signature);
       console.log("Recovered address:", recovered);
       if (recovered.toLowerCase() !== account.address.toLowerCase()) {
-        throw new Error(
-          `Signature does not recover to user address: ${recovered}`
-        );
+        throw new Error(`Signature does not recover to user address: ${recovered}`);
       }
     } catch (verifyErr) {
       console.error("Signature verification failed:", verifyErr);
       throw new Error("Invalid signature generated");
     }
     const args = [message.user, message.deadline];
+    const sig = ethers.Signature.from(signature);
+    const fullArgs = [...args, sig.v, sig.r, sig.s];
     console.log("Relayer Request:", {
       contractAddress: VITE_STAKING_ADDRESS,
       functionName,
-      args,
+      args: fullArgs,
       userAddress: account.address,
       signature,
     });
-    const retryFetch = async (url, options, retries = 3, delay = 200) => {
+    const retryFetch = async (url, retries = 3, delay = 1000) => {
+      const requestBody = {
+        contractAddress: VITE_STAKING_ADDRESS,
+        functionName,
+        args: fullArgs,
+        userAddress: account.address,
+        signature,
+        chainId: chainId,
+      };
       let lastError = null;
       for (let i = 1; i <= retries; i++) {
         try {
-          console.log(`Relayer Attempt ${i}: Sending request to ${url}`);
-          const response = await fetch(url, options);
+          console.log(`Relayer Attempt ${i}: Sending request to ${url}`, requestBody);
+          const response = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(requestBody),
+          });
           if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            throw new Error(
-              `Relayer error: ${
-                errorData.error || response.statusText || "Unknown error"
-              }`
-            );
+            throw new Error(`Relayer error: ${errorData.error || response.statusText || "Unknown error"}`);
           }
           const result = await response.json();
           console.log(`Relayer Response (Attempt ${i}):`, result);
@@ -735,36 +710,27 @@ export default function Referrals() {
             if (pendingTx) {
               const txConfirmed = await checkTransactionStatus(pendingTx);
               if (txConfirmed) {
-                console.log(
-                  "Transaction succeeded despite relayer error:",
-                  pendingTx
-                );
+                console.log("Transaction succeeded despite relayer error:", pendingTx);
                 return { txHash: pendingTx, success: true };
               }
             }
-            throw new Error(
-              `Failed to connect to relayer after ${retries} attempts: ${err.message}`
-            );
+            throw new Error(`Failed to connect to relayer after ${retries} attempts: ${err.message}`);
           }
-          await new Promise((resolve) => setTimeout(resolve, delay));
+          await new Promise((resolve) => setTimeout(resolve, delay * 2 ** i));
         }
       }
     };
     try {
-      const result = await retryFetch(VITE_RELAYER_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contractAddress: VITE_STAKING_ADDRESS,
-          functionName,
-          args,
-          userAddress: account.address,
-          signature,
-        }),
-      });
+      const result = await retryFetch(VITE_RELAYER_URL);
       if (result.txHash) {
-        const txConfirmed = await checkTransactionStatus(result.txHash);
-        if (!txConfirmed) {
+        const receipt = await provider.waitForTransaction(result.txHash, 1, 60000);
+        if (receipt.status !== 1) {
+          try {
+            const tx = await provider.getTransaction(result.txHash);
+            await provider.call(tx, tx.blockNumber);
+          } catch (callErr) {
+            throw new Error(`Transaction reverted: ${callErr.reason || callErr.message}`);
+          }
           throw new Error("Transaction failed to confirm on-chain");
         }
       } else if (!result.success) {
@@ -773,7 +739,17 @@ export default function Referrals() {
       return { signature, txHash: result.txHash, success: result.success };
     } catch (err) {
       console.error("Relayer Communication Failed:", err);
-      throw err;
+      let errorMessage = "Failed to process transaction.";
+      if (err.message.includes("Missing required fields")) {
+        errorMessage = "Invalid transaction data. Please try again.";
+      } else if (err.message.includes("Relayer communication failed")) {
+        errorMessage = "Cannot connect to relayer. Please ensure the relayer is running.";
+      } else if (err.message.includes("Invalid signature")) {
+        errorMessage = "Invalid signature. Please try again.";
+      } else if (err.message.includes("Transaction reverted")) {
+        errorMessage = err.message;
+      }
+      throw new Error(errorMessage);
     } finally {
       setPendingTx(null);
     }
@@ -781,15 +757,25 @@ export default function Referrals() {
 
   // Handle gasless withdrawal
   const handleWithdraw = async () => {
-    if (
-      !wallet ||
-      !account ||
-      !account.address ||
-      !ethers.isAddress(account.address)
-    ) {
+    if (!wallet || !account || !account.address || !ethers.isAddress(account.address)) {
       toast.error("Please connect a valid wallet via the Account button");
       return;
     }
+
+    // Check suspension status
+    try {
+      const suspension = await checkSuspensionStatus(account.address);
+      if (suspension.isSuspended) {
+        console.log("handleWithdraw: User is suspended", suspension);
+        toast.error(`Your account is suspended. Reason: ${suspension.reason || "Not provided"}.`);
+        return;
+      }
+    } catch (err) {
+      console.error("handleWithdraw: Suspension check failed:", err);
+      toast.error("Failed to verify account status. Please try again.");
+      return;
+    }
+
     if (referralBonus < MIN_REFERRAL_WITHDRAWAL) {
       toast.error("Minimum 5 USDT required to withdraw");
       return;
@@ -806,12 +792,7 @@ export default function Referrals() {
       }
       const nonce = BigInt(stakingNonceData);
       const deadline = Math.floor(Date.now() / 1000) + 30 * 60;
-      console.log(
-        "Withdraw Referral Bonus Nonce:",
-        nonce.toString(),
-        "Deadline:",
-        deadline
-      );
+      console.log("Withdraw Referral Bonus Nonce:", nonce.toString(), "Deadline:", deadline);
       const result = await handleGaslessTransaction({
         functionName: "executeMetaWithdrawReferralBonus",
         primaryType: "WithdrawReferralBonus",
@@ -822,10 +803,7 @@ export default function Referrals() {
         await checkTransactionStatus(result.txHash);
       }
       console.log("Withdraw Referral Bonus Transaction Hash:", result.txHash);
-      toast.success(
-        `Withdrawn ${formatUSDT(referralBonus)} USDT successfully`,
-        { id: toastId }
-      );
+      toast.success(`Withdrawn ${formatUSDT(referralBonus)} USDT successfully`, { id: toastId });
       await Promise.all([
         refetchReferralBonus(),
         refetchStakingNonce(),
@@ -844,6 +822,8 @@ export default function Referrals() {
         errorMessage = "Invalid signature. Please try again.";
       } else if (err.message.includes("nonce")) {
         errorMessage = "Failed to fetch nonce. Please try again.";
+      } else if (err.message.includes("Account is suspended")) {
+        errorMessage = err.message;
       }
       toast.error(errorMessage, { id: toastId });
       await refetchStakingNonce();
@@ -855,8 +835,7 @@ export default function Referrals() {
   // Progress bar
   const referralProgress = Math.min(
     (Number(ethers.formatUnits(referralBonus, USDT_DECIMALS)) /
-      Number(ethers.formatUnits(MIN_REFERRAL_WITHDRAWAL, USDT_DECIMALS))) *
-      100,
+      Number(ethers.formatUnits(MIN_REFERRAL_WITHDRAWAL, USDT_DECIMALS))) * 100,
     100
   );
 
@@ -880,6 +859,16 @@ export default function Referrals() {
 
   return (
     <div className="max-w-full px-4 sm:px-6 lg:px-8 py-8 bg-slate-900 min-w-0">
+      {isSuspended.isSuspended && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="bg-red-500/20 text-red-200 p-3 rounded-md mb-4 font-geist-mono text-xs sm:text-sm"
+        >
+          Your account is suspended. Reason: {isSuspended.reason || "Not provided"}.
+        </motion.div>
+      )}
       <motion.h2
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -910,9 +899,7 @@ export default function Referrals() {
           </h3>
           <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3 sm:space-y-0 space-y-3 flex-1">
             <p className="text-xs sm:text-sm text-slate-400 font-geist-mono truncate">
-              {`${window.location.origin}/dashboard/staking?ref=${
-                account?.address || "0x0"
-              }`}
+              {`${window.location.origin}/dashboard/staking?ref=${account?.address || "0x0"}`}
             </p>
             <button
               onClick={handleCopyReferralLink}
@@ -945,16 +932,13 @@ export default function Referrals() {
             />
           </div>
           <p className="text-xs sm:text-sm text-slate-400 font-geist-mono">
-            {formatUSDT(referralBonus)} / {formatUSDT(MIN_REFERRAL_WITHDRAWAL)}{" "}
-            USDT to withdraw
+            {formatUSDT(referralBonus)} / {formatUSDT(MIN_REFERRAL_WITHDRAWAL)} USDT to withdraw
           </p>
           <button
             onClick={handleWithdraw}
-            disabled={
-              isWithdrawLoading || referralBonus < MIN_REFERRAL_WITHDRAWAL
-            }
+            disabled={isWithdrawLoading || referralBonus < MIN_REFERRAL_WITHDRAWAL || isSuspended.isSuspended}
             className={`group flex items-center justify-center px-4 sm:px-6 py-2 sm:py-2.5 bg-slate-800 text-cyan-600 border border-cyan-600 rounded-md hover:bg-slate-700 transition-all duration-300 w-full sm:w-auto text-xs sm:text-sm mt-3 sm:mt-4 ${
-              isWithdrawLoading || referralBonus < MIN_REFERRAL_WITHDRAWAL
+              isWithdrawLoading || referralBonus < MIN_REFERRAL_WITHDRAWAL || isSuspended.isSuspended
                 ? "opacity-50 cursor-not-allowed"
                 : ""
             }`}
@@ -983,10 +967,7 @@ export default function Referrals() {
                 Staked Amount
               </p>
               <p className="text-lg sm:text-xl md:text-2xl font-bold text-white font-geist">
-                $
-                {formatUSDT(
-                  stakes.reduce((sum, stake) => sum + stake.amount, 0n)
-                )}
+                ${formatUSDT(stakes.reduce((sum, stake) => sum + stake.amount, 0n))}
               </p>
             </div>
           </div>
@@ -1004,8 +985,7 @@ export default function Referrals() {
           initial="initial"
           animate={cardVariants.animate(3)}
           whileHover="hover"
-          className="bg-slate-800/40 backdrop-blur-sm p-3 sm:p-4 md:p-6 rounded-2xl border border-cyan-700/30 w-full flex flex-col"
-        >
+          className="bg-slate-800/40 backdrop-blur-sm p-3 sm:p-4 md:p-6 rounded-2xl border border-cyan-700/30 w-full flex flex-col">
           <h3 className="text-base sm:text-lg md:text-xl font-bold text-slate-200 mb-3 sm:mb-4 font-geist">
             Referral Count
           </h3>
@@ -1032,15 +1012,9 @@ export default function Referrals() {
           <table className="w-full text-left text-slate-200 font-geist-mono text-xs sm:text-sm min-w-[600px]">
             <thead>
               <tr className="border-b border-cyan-700/30">
-                <th className="py-1.5 sm:py-2 px-1 sm:px-2 md:px-3">
-                  Referee Address
-                </th>
-                <th className="py-1.5 sm:py-2 px-1 sm:px-2 md:px-3 min-w-[100px]">
-                  Date
-                </th>
-                <th className="py-1.5 sm:py-2 px-1 sm:px-2 md:px-3 min-w-[80px]">
-                  Bonus (USDT)
-                </th>
+                <th className="py-1.5 sm:py-2 px-1 sm:px-2 md:px-3">Referee Address</th>
+                <th className="py-1.5 sm:py-2 px-1 sm:px-2 md:px-3 min-w-[100px]">Date</th>
+                <th className="py-1.5 sm:py-2 px-1 sm:px-2 md:px-3 min-w-[80px]">Bonus (USDT)</th>
               </tr>
             </thead>
             <tbody>
@@ -1062,12 +1036,8 @@ export default function Referrals() {
                       style={{ fontFamily: "Geist Mono" }}
                     />
                   </td>
-                  <td className="py-1.5 sm:py-2 px-1 sm:px-2 md:px-3">
-                    {referral.timestamp}
-                  </td>
-                  <td className="py-1.5 sm:py-2 px-1 sm:px-2 md:px-3">
-                    {formatUSDT(referral.bonus)}
-                  </td>
+                  <td className="py-1.5 sm:py-2 px-1 sm:px-2 md:px-3">{referral.timestamp}</td>
+                  <td className="py-1.5 sm:py-2 px-1 sm:px-2 md:px-3">{formatUSDT(referral.bonus)}</td>
                 </tr>
               ))}
             </tbody>
@@ -1075,8 +1045,7 @@ export default function Referrals() {
         </div>
         {referrals.length === 0 && (
           <p className="text-slate-400 text-xs sm:text-sm mt-3 sm:mt-4 font-geist-mono">
-            No referrals yet. Share your link to earn{" "}
-            {formatUSDT(REFERRAL_BONUS)} USDT per referral!
+            No referrals yet. Share your link to earn {formatUSDT(REFERRAL_BONUS)} USDT per referral!
           </p>
         )}
       </motion.div>
@@ -1095,26 +1064,16 @@ export default function Referrals() {
           <table className="w-full text-left text-slate-200 font-geist-mono text-xs sm:text-sm min-w-[600px]">
             <thead>
               <tr className="border-b border-cyan-700/30">
-                <th className="py-1.5 sm:py-2 px-1 sm:px-2 md:px-3">
-                  Amount (USDT)
-                </th>
-                <th className="py-1.5 sm:py-2 px-1 sm:px-2 md:px-3 min-w-[100px]">
-                  Date
-                </th>
-                <th className="py-1.5 sm:py-2 px-1 sm:px-2 md:px-3 min-w-[80px]">
-                  Tx Hash
-                </th>
+                <th className="py-1.5 sm:py-2 px-1 sm:px-2 md:px-3">Amount (USDT)</th>
+                <th className="py-1.5 sm:py-2 px-1 sm:px-2 md:px-3 min-w-[100px]">Date</th>
+                <th className="py-1.5 sm:py-2 px-1 sm:px-2 md:px-3 min-w-[80px]">Tx Hash</th>
               </tr>
             </thead>
             <tbody>
               {withdrawalHistory.map((withdrawal, index) => (
                 <tr key={index} className="border-b border-cyan-700/30">
-                  <td className="py-1.5 sm:py-2 px-1 sm:px-2 md:px-3">
-                    {formatUSDT(withdrawal.amount)}
-                  </td>
-                  <td className="py-1.5 sm:py-2 px-1 sm:px-2 md:px-3">
-                    {withdrawal.timestamp}
-                  </td>
+                  <td className="py-1.5 sm:py-2 px-1 sm:px-2 md:px-3">{formatUSDT(withdrawal.amount)}</td>
+                  <td className="py-1.5 sm:py-2 px-1 sm:px-2 md:px-3">{withdrawal.timestamp}</td>
                   <td className="py-1.5 sm:py-2 px-1 sm:px-2 md:px-3">
                     <span
                       className="text-cyan-600 cursor-pointer hover:underline text-xs sm:text-sm"
@@ -1124,10 +1083,7 @@ export default function Referrals() {
                         toast.success("Transaction hash copied!");
                       }}
                     >
-                      {`${withdrawal.txHash.slice(
-                        0,
-                        6
-                      )}...${withdrawal.txHash.slice(-4)}`}
+                      {`${withdrawal.txHash.slice(0, 6)}...${withdrawal.txHash.slice(-4)}`}
                     </span>
                   </td>
                 </tr>
@@ -1172,16 +1128,9 @@ export default function Referrals() {
         shouldCloseOnOverlayClick={true}
         shouldCloseOnEsc={true}
       >
-        <motion.div
-          variants={modalVariants}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-        >
+        <motion.div variants={modalVariants} initial="initial" animate="animate" exit="exit">
           <div className="flex justify-between items-center mb-3 sm:mb-4">
-            <h3 className="text-base sm:text-lg md:text-xl font-bold text-slate-200 font-geist">
-              Referee Details
-            </h3>
+            <h3 className="text-base sm:text-lg md:text-xl font-bold text-slate-200 font-geist">Referee Details</h3>
             <button
               onClick={() => setSelectedReferral(null)}
               className="text-slate-400 hover:text-cyan-600"

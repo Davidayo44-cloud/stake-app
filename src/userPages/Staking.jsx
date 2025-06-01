@@ -40,10 +40,12 @@ const requiredEnvVars = {
   VITE_RELAYER_URL: import.meta.env.VITE_RELAYER_URL,
   VITE_CHAIN_ID: import.meta.env.VITE_CHAIN_ID,
   VITE_RPC_URL: import.meta.env.VITE_RPC_URL,
+  VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
   VITE_USDT_DECIMALS: import.meta.env.VITE_USDT_DECIMALS,
   VITE_MIN_STAKE: import.meta.env.VITE_MIN_STAKE,
   VITE_MIN_REFERRAL_WITHDRAWAL: import.meta.env.VITE_MIN_REFERRAL_WITHDRAWAL,
   VITE_THIRDWEB_CLIENT_ID: import.meta.env.VITE_THIRDWEB_CLIENT_ID,
+  VITE_COMPOUND_RATE: import.meta.env.VITE_PLAN_REWARD_RATE,
 };
 
 const missingEnvVars = Object.entries(requiredEnvVars)
@@ -65,10 +67,12 @@ const {
   VITE_RELAYER_URL,
   VITE_CHAIN_ID,
   VITE_RPC_URL,
+  VITE_API_BASE_URL,
   VITE_USDT_DECIMALS,
   VITE_MIN_STAKE,
   VITE_MIN_REFERRAL_WITHDRAWAL,
   VITE_THIRDWEB_CLIENT_ID,
+  VITE_COMPOUND_RATE,
 } = requiredEnvVars;
 
 // Validate USDT decimals
@@ -95,6 +99,13 @@ if (minReferralWithdrawal <= 0n) {
   throw new Error("Invalid minimum referral withdrawal");
 }
 
+// Validate compound rate
+const compoundRate = parseInt(VITE_COMPOUND_RATE, 10);
+if (isNaN(compoundRate) || compoundRate <= 0) {
+  console.error("Staking.jsx: Invalid compound rate:", VITE_COMPOUND_RATE);
+  throw new Error("Invalid compound rate");
+}
+
 // Validate contract addresses
 if (!ethers.isAddress(VITE_USDT_ADDRESS)) {
   console.error(
@@ -117,7 +128,7 @@ if (isNaN(chainId) || chainId <= 0) {
   console.error("Staking.jsx: Invalid chain ID:", VITE_CHAIN_ID);
   throw new Error("Invalid chain ID");
 }
-console.log(chainId)
+
 // Utility to format USDT
 const formatUSDT = (value) => {
   if (value === null || value === undefined || value < 0n) return "0.00";
@@ -161,6 +172,10 @@ export default function Staking() {
   const [selectedStake, setSelectedStake] = useState(null);
   const [isReferrerReadOnly, setIsReferrerReadOnly] = useState(false);
   const [referralBonus, setReferralBonus] = useState(0n);
+  const [isSuspended, setIsSuspended] = useState({
+    isSuspended: false,
+    reason: null,
+  });
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -178,8 +193,6 @@ export default function Staking() {
     StakingContractABI,
     provider
   );
-
- 
 
   // Handle referral logic
   useEffect(() => {
@@ -246,6 +259,64 @@ export default function Staking() {
         });
         if (i === retries - 1) throw err;
         await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  };
+
+  // Check suspension status
+  const checkSuspensionStatus = async (userAddress) => {
+    if (!ethers.isAddress(userAddress)) {
+      console.error("Staking.jsx: Invalid user address:", userAddress);
+      return { isSuspended: false, reason: null };
+    }
+
+    const maxRetries = 3;
+    const retryDelay = 1000; // 1 second
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch(
+          `${VITE_API_BASE_URL}/api/check-suspension/${userAddress.toLowerCase()}`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("Staking.jsx: Suspension check error", {
+            status: response.status,
+            errorText,
+            attempt,
+          });
+          if (response.status === 404) {
+            console.warn(
+              "Suspension API endpoint not found. Check server route: /api/check-suspension/:address"
+            );
+          }
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log("Staking.jsx: Suspension status fetched", data);
+        return data; // { isSuspended: boolean, reason: string, suspendedAt: Date }
+      } catch (err) {
+        console.error("Staking.jsx: Failed to check suspension status:", {
+          message: err.message,
+          stack: err.stack,
+          attempt,
+        });
+
+        if (attempt === maxRetries) {
+          console.warn("Staking.jsx: Max retries reached for suspension check");
+          return { isSuspended: false, reason: null }; // Default to not suspended
+        }
+
+        // Wait before retrying
+        await new Promise((resolve) => setTimeout(resolve, retryDelay));
       }
     }
   };
@@ -376,11 +447,10 @@ export default function Staking() {
             );
             const startTimestamp = BigInt(stake.startTimestamp);
             const totalRewardsWei = BigInt(totalRewards);
-            // Calculate pendingReward in Wei to avoid floating-point issues
             const pendingRewardWei = totalRewardsWei - accruedRewardWei;
             const pendingReward = Number(
               ethers.formatUnits(pendingRewardWei, usdtDecimals)
-            ).toFixed(usdtDecimals); // Use usdtDecimals for precision
+            ).toFixed(usdtDecimals);
             const currentTime = Math.floor(Date.now() / 1000);
             const stakeEndTime = Number(startTimestamp) + 5 * 86400;
             const isActive = currentTime < stakeEndTime;
@@ -392,8 +462,8 @@ export default function Staking() {
               startTimestamp,
               accruedReward,
               accruedRewardWei,
-              pendingReward: Number(pendingReward), // Store as number
-              pendingRewardWei, // Store Wei for accuracy
+              pendingReward: Number(pendingReward),
+              pendingRewardWei,
               isActive,
             });
           }
@@ -415,20 +485,23 @@ export default function Staking() {
   const updateState = async () => {
     if (account?.address && ethers.isAddress(account.address)) {
       try {
-        const [balance, allowance, count, referralBonus] = await Promise.all([
-          withRetry(() => usdtContract.balanceOf(account.address)),
-          withRetry(() =>
-            usdtContract.allowance(account.address, VITE_STAKING_ADDRESS)
-          ),
-          withRetry(() => stakingContract.getUserStakeCount(account.address)),
-          withRetry(() =>
-            stakingContract.getUserReferralBonus(account.address)
-          ),
-        ]);
+        const [balance, allowance, count, referralBonus, suspensionStatus] =
+          await Promise.all([
+            withRetry(() => usdtContract.balanceOf(account.address)),
+            withRetry(() =>
+              usdtContract.allowance(account.address, VITE_STAKING_ADDRESS)
+            ),
+            withRetry(() => stakingContract.getUserStakeCount(account.address)),
+            withRetry(() =>
+              stakingContract.getUserReferralBonus(account.address)
+            ),
+            checkSuspensionStatus(account.address),
+          ]);
         setUsdtBalance(formatUSDT(balance));
         setUsdtAllowance(formatUSDT(allowance));
         setStakeCount(count.toString());
         setReferralBonus(referralBonus);
+        setIsSuspended(suspensionStatus);
 
         const stakesData = await fetchStakes(account.address, parseInt(count));
         setStakes(stakesData);
@@ -444,6 +517,7 @@ export default function Staking() {
       setUsdtAllowance("0.00");
       setStakes([]);
       setReferralBonus(0n);
+      setIsSuspended({ isSuspended: false, reason: null });
     }
     setIsLoading(false);
   };
@@ -476,6 +550,9 @@ export default function Staking() {
   }) => {
     if (!account) {
       throw new Error("Please connect your wallet");
+    }
+    if (isSuspended.isSuspended) {
+      throw new Error("Your account is suspended");
     }
 
     if (isApprove) {
@@ -799,6 +876,10 @@ export default function Staking() {
       toast.error("Please connect your wallet");
       return;
     }
+    if (isSuspended.isSuspended) {
+      toast.error("Your account is suspended");
+      return;
+    }
 
     const approveAmountNum = Number(approveAmount);
     if (isNaN(approveAmountNum) || approveAmountNum <= 0) {
@@ -864,6 +945,8 @@ export default function Staking() {
           "Insufficient BNB for gas fees. Please add at least 0.001 BNB to your wallet.";
       } else if (err.message.includes("USDT balance")) {
         errorMessage = "Insufficient USDT balance. Please acquire more USDT.";
+      } else if (err.message.includes("account is suspended")) {
+        errorMessage = "Your account is suspended";
       } else {
         errorMessage = `Approval failed: ${err.message}`;
       }
@@ -876,6 +959,10 @@ export default function Staking() {
   const handleStake = async () => {
     if (!account) {
       toast.error("Please connect your wallet");
+      return;
+    }
+    if (isSuspended.isSuspended) {
+      toast.error("Your account is suspended");
       return;
     }
 
@@ -913,7 +1000,8 @@ export default function Staking() {
       if (paused) {
         throw new Error("Contract is paused");
       }
-      const requiredReward = (amountBigInt * BigInt(13)) / BigInt(100);
+      const requiredReward =
+        (amountBigInt * BigInt(compoundRate)) / BigInt(100);
       if (rewardPoolBalance < requiredReward) {
         throw new Error(
           `Insufficient reward pool balance: ${ethers.formatUnits(
@@ -1012,6 +1100,8 @@ export default function Staking() {
         errorMessage = "Relayer out of funds. Please contact the admin.";
       } else if (err.message.includes("Transaction deadline")) {
         errorMessage = "Transaction expired. Please try again.";
+      } else if (err.message.includes("account is suspended")) {
+        errorMessage = "Your account is suspended";
       } else {
         errorMessage = `Transaction failed: ${err.message}`;
       }
@@ -1024,6 +1114,10 @@ export default function Staking() {
   const handleWithdrawReward = async (stakeIndex, totalReward) => {
     if (!account) {
       toast.error("Please connect your wallet");
+      return;
+    }
+    if (isSuspended.isSuspended) {
+      toast.error("Your account is suspended");
       return;
     }
     if (totalReward <= 0) {
@@ -1076,6 +1170,8 @@ export default function Staking() {
         errorMessage = "Wallet not connected. Please reconnect.";
       } else if (err.message.includes("Invalid signature")) {
         errorMessage = "Invalid signature. Please try again.";
+      } else if (err.message.includes("account is suspended")) {
+        errorMessage = "Your account is suspended";
       } else {
         errorMessage = `Withdraw failed: ${err.message}`;
       }
@@ -1088,6 +1184,10 @@ export default function Staking() {
   const handleUnstake = async (stakeIndex, amount) => {
     if (!account) {
       toast.error("Please connect your wallet");
+      return;
+    }
+    if (isSuspended.isSuspended) {
+      toast.error("Your account is suspended");
       return;
     }
     if (amount <= 0) {
@@ -1211,6 +1311,8 @@ export default function Staking() {
       } else if (err.message.includes("Insufficient contract balance")) {
         errorMessage =
           "Insufficient contract balance. Please contact the admin.";
+      } else if (err.message.includes("account is suspended")) {
+        errorMessage = "Your account is suspended";
       } else {
         errorMessage = `Unstake failed: ${err.message}`;
       }
@@ -1223,6 +1325,10 @@ export default function Staking() {
   const handleCompound = async (stakeIndex) => {
     if (!account) {
       toast.error("Please connect your wallet");
+      return;
+    }
+    if (isSuspended.isSuspended) {
+      toast.error("Your account is suspended");
       return;
     }
     if (pendingTx) {
@@ -1317,6 +1423,8 @@ export default function Staking() {
       } else if (err.message.includes("Insufficient reward pool balance")) {
         errorMessage =
           "Insufficient reward pool balance. Please contact the admin.";
+      } else if (err.message.includes("account is suspended")) {
+        errorMessage = "Your account is suspended";
       } else {
         errorMessage = `Compound failed: ${err.message}`;
       }
@@ -1329,6 +1437,10 @@ export default function Staking() {
   const handleWithdrawReferralBonus = async () => {
     if (!account) {
       toast.error("Please connect your wallet");
+      return;
+    }
+    if (isSuspended.isSuspended) {
+      toast.error("Your account is suspended");
       return;
     }
     if (referralBonus < minReferralWithdrawal) {
@@ -1379,6 +1491,8 @@ export default function Staking() {
         errorMessage = "Wallet not connected. Please reconnect.";
       } else if (err.message.includes("Invalid signature")) {
         errorMessage = "Invalid signature. Please try again.";
+      } else if (err.message.includes("account is suspended")) {
+        errorMessage = "Your account is suspended";
       } else {
         errorMessage = `Withdraw failed: ${err.message}`;
       }
@@ -1414,7 +1528,9 @@ export default function Staking() {
     !isAmountValid ||
     !isReferrerValid ||
     Number(usdtAllowance) === 0 ||
-    Number(usdtAllowance) < Number(ethers.formatUnits(minStake, usdtDecimals));
+    Number(usdtAllowance) <
+      Number(ethers.formatUnits(minStake, usdtDecimals)) ||
+    isSuspended.isSuspended;
 
   return (
     <div className="mx-auto max-w-[95vw] sm:max-w-3xl md:max-w-5xl lg:max-w-7xl px-3 sm:px-4 md:px-6 lg:px-8 py-6 sm:py-8 w-full bg-slate-900">
@@ -1426,6 +1542,18 @@ export default function Staking() {
       >
         Staking
       </motion.h2>
+
+      {isSuspended.isSuspended && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="bg-red-500/20 text-red-200 p-3 rounded-md mb-4 font-geist-mono text-xs sm:text-sm"
+        >
+          Your account is suspended. Reason:{" "}
+          {isSuspended.reason || "Not provided"}.
+        </motion.div>
+      )}
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -1455,7 +1583,6 @@ export default function Staking() {
           transition={{ duration: 0.5, delay: 0.1 }}
           className="bg-slate-800/40 backdrop-blur-sm p-3 sm:p-4 md:p-6 rounded-2xl border border-cyan-700/30 w-full"
         >
-         
           <h3 className="text-base sm:text-lg md:text-xl font-bold text-slate-200 mb-2 sm:mb-4 font-geist">
             Approve & Stake USDT
           </h3>
@@ -1485,9 +1612,17 @@ export default function Staking() {
             </div>
             <button
               onClick={handleApprove}
-              disabled={isActionLoading || !account || !isApproveAmountValid}
+              disabled={
+                isActionLoading ||
+                !account ||
+                !isApproveAmountValid ||
+                isSuspended.isSuspended
+              }
               className={`group w-full flex items-center justify-center px-3 sm:px-4 md:px-6 py-1.5 sm:py-2 bg-slate-800 text-cyan-600 border border-cyan-600 rounded-md hover:bg-slate-700 transition-all duration-300 text-xs sm:text-sm ${
-                isActionLoading || !account || !isApproveAmountValid
+                isActionLoading ||
+                !account ||
+                !isApproveAmountValid ||
+                isSuspended.isSuspended
                   ? "opacity-50 cursor-not-allowed"
                   : ""
               }`}
@@ -1599,10 +1734,16 @@ export default function Staking() {
         <button
           onClick={handleWithdrawReferralBonus}
           disabled={
-            isActionLoading || !account || referralBonus < minReferralWithdrawal
+            isActionLoading ||
+            !account ||
+            referralBonus < minReferralWithdrawal ||
+            isSuspended.isSuspended
           }
           className={`group flex items-center justify-center px-3 sm:px-4 md:px-6 py-1.5 sm:py-2 bg-slate-800 text-cyan-600 border border-cyan-600 rounded-md hover:bg-slate-700 transition-all duration-300 w-full sm:w-auto text-xs sm:text-sm ${
-            isActionLoading || !account || referralBonus < minReferralWithdrawal
+            isActionLoading ||
+            !account ||
+            referralBonus < minReferralWithdrawal ||
+            isSuspended.isSuspended
               ? "opacity-50 cursor-not-allowed"
               : ""
           }`}
@@ -1711,62 +1852,62 @@ export default function Staking() {
             </button>
           </div>
           {selectedStake && (
-            <div className="space-y-2 sm:space-y-3 md:space-y-4 text-slate-200 font-geist-mono text-xs sm:text-sm">
-              <p>Amount: {formatUSDT(selectedStake.amountWei)} USDT</p>
-              <p>
-                Start Date:{" "}
-                {new Date(
-                  Number(selectedStake.startTimestamp) * 1000
-                ).toLocaleDateString()}
-              </p>
-              <p>
-                Accrued Rewards: {formatUSDT(selectedStake.accruedRewardWei)}{" "}
-                USDT
-              </p>
-              <p>
-                Pending Rewards:{" "}
-                {Number(selectedStake.pendingReward).toFixed(2)} USDT
-              </p>
-              <p>
-                Status:{" "}
+            <div className="space-y-2 sm:space-y-3 md:space-y-4">
+              <div>
+                <p className="text-xs sm:text-sm text-slate-400 font-geist-mono">
+                  Amount Staked
+                </p>
+                <p className="text-sm sm:text-base md:text-lg text-slate-200 font-geist">
+                  {formatUSDT(selectedStake.amountWei)} USDT
+                </p>
+              </div>
+              <div>
+                <p className="text-xs sm:text-sm text-slate-400 font-geist-mono">
+                  Start Date
+                </p>
+                <p className="text-sm sm:text-base md:text-lg text-slate-200 font-geist">
+                  {new Date(
+                    Number(selectedStake.startTimestamp) * 1000
+                  ).toLocaleDateString()}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs sm:text-sm text-slate-400 font-geist-mono">
+                  Pending Rewards
+                </p>
+                <p className="text-sm sm:text-base md:text-lg text-slate-200 font-geist">
+                  {Number(selectedStake.pendingReward).toFixed(2)} USDT
+                </p>
+              </div>
+              <div>
+                <p className="text-xs sm:text-sm text-slate-400 font-geist-mono">
+                  Status
+                </p>
                 <span
                   className={`inline-block px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full text-xs ${
                     getStakeStatus(selectedStake).color
-                  } text-slate-200`}
+                  } text-slate-200 font-geist-mono`}
                 >
                   {getStakeStatus(selectedStake).label}
                 </span>
-              </p>
-              {selectedStake.isActive && selectedStake.amountWei > 0n && (
-                <p className="text-red-500 text-xs">
-                  Early unstaking incurs a 50% penalty on rewards.
-                </p>
-              )}
-              {selectedStake.amountWei <= 0n && (
-                <p className="text-slate-400 text-xs">
-                  This stake has been fully unstaked. No further actions are
-                  available.
-                </p>
-              )}
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 md:gap-4 flex-wrap">
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 md:gap-4">
                 <button
                   onClick={() =>
                     handleWithdrawReward(
                       selectedStake.id,
-                      selectedStake.accruedReward + selectedStake.pendingReward
+                      selectedStake.pendingReward
                     )
                   }
                   disabled={
                     isActionLoading ||
-                    !account ||
-                    selectedStake.accruedReward + selectedStake.pendingReward <=
-                      0
+                    selectedStake.pendingReward <= 0 ||
+                    isSuspended.isSuspended
                   }
-                  className={`group flex items-center justify-center px-3 sm:px-4 py-1.5 sm:py-2 bg-slate-800 text-cyan-600 border border-cyan-600 rounded-md hover:bg-slate-700 transition-all duration-300 text-xs sm:text-sm flex-1 sm:flex-none ${
+                  className={`group flex items-center justify-center px-3 sm:px-4 py-1.5 sm:py-2 bg-slate-800 text-cyan-600 border border-cyan-600 rounded-md hover:bg-slate-700 transition-all duration-300 text-xs sm:text-sm ${
                     isActionLoading ||
-                    !account ||
-                    selectedStake.accruedReward + selectedStake.pendingReward <=
-                      0
+                    selectedStake.pendingReward <= 0 ||
+                    isSuspended.isSuspended
                       ? "opacity-50 cursor-not-allowed"
                       : ""
                   }`}
@@ -1779,10 +1920,14 @@ export default function Staking() {
                     handleUnstake(selectedStake.id, selectedStake.amount)
                   }
                   disabled={
-                    isActionLoading || !account || selectedStake.amountWei <= 0n
+                    isActionLoading ||
+                    selectedStake.amount <= 0 ||
+                    isSuspended.isSuspended
                   }
-                  className={`group flex items-center justify-center px-3 sm:px-4 py-1.5 sm:py-2 bg-slate-800 text-cyan-600 border border-cyan-600 rounded-md hover:bg-slate-700 transition-all duration-300 text-xs sm:text-sm flex-1 sm:flex-none ${
-                    isActionLoading || !account || selectedStake.amountWei <= 0n
+                  className={`group flex items-center justify-center px-3 sm:px-4 py-1.5 sm:py-2 bg-slate-800 text-cyan-600 border border-cyan-600 rounded-md hover:bg-slate-700 transition-all duration-300 text-xs sm:text-sm ${
+                    isActionLoading ||
+                    selectedStake.amount <= 0 ||
+                    isSuspended.isSuspended
                       ? "opacity-50 cursor-not-allowed"
                       : ""
                   }`}
@@ -1794,15 +1939,13 @@ export default function Staking() {
                   onClick={() => handleCompound(selectedStake.id)}
                   disabled={
                     isActionLoading ||
-                    !account ||
-                    selectedStake.pendingReward <
-                      Number(ethers.formatUnits(minStake, usdtDecimals))
+                    selectedStake.pendingReward <= 0 ||
+                    isSuspended.isSuspended
                   }
-                  className={`group flex items-center justify-center px-3 sm:px-4 py-1.5 sm:py-2 bg-slate-800 text-cyan-600 border border-cyan-600 rounded-md hover:bg-slate-700 transition-all duration-300 text-xs sm:text-sm flex-1 sm:flex-none ${
+                  className={`group flex items-center justify-center px-3 sm:px-4 py-1.5 sm:py-2 bg-slate-800 text-cyan-600 border border-cyan-600 rounded-md hover:bg-slate-700 transition-all duration-300 text-xs sm:text-sm ${
                     isActionLoading ||
-                    !account ||
-                    selectedStake.pendingReward <
-                      Number(ethers.formatUnits(minStake, usdtDecimals))
+                    selectedStake.pendingReward <= 0 ||
+                    isSuspended.isSuspended
                       ? "opacity-50 cursor-not-allowed"
                       : ""
                   }`}
@@ -1819,14 +1962,12 @@ export default function Staking() {
       <Tooltip
         id="usdt-balance-tooltip"
         place="top"
-        className="bg-slate-800 text-cyan-600 text-xs sm:text-sm"
-        style={{ fontFamily: "Geist Mono" }}
+        className="text-xs sm:text-sm font-geist-mono bg-slate-800 text-slate-200"
       />
       <Tooltip
         id="referral-bonus-tooltip"
         place="top"
-        className="bg-slate-800 text-cyan-600 text-xs sm:text-sm"
-        style={{ fontFamily: "Geist Mono" }}
+        className="text-xs sm:text-sm font-geist-mono bg-slate-800 text-slate-200"
       />
     </div>
   );

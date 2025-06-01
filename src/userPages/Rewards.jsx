@@ -1,5 +1,3 @@
-
-
 import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { DollarSign, X, ArrowRight, RefreshCw } from "lucide-react";
@@ -35,9 +33,12 @@ const USDT_ADDRESS = import.meta.env.VITE_USDT_ADDRESS;
 const STAKING_ADDRESS = import.meta.env.VITE_STAKING_ADDRESS;
 const RPC_URL = import.meta.env.VITE_RPC_URL;
 const RELAYER_URL = import.meta.env.VITE_RELAYER_URL;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const DEPLOYMENT_BLOCK =
   parseInt(import.meta.env.VITE_STAKING_DEPLOYMENT_BLOCK, 10) || 0;
 const USDT_DECIMALS = parseInt(import.meta.env.VITE_USDT_DECIMALS, 10) || 18;
+const PLAN_REWARD_RATE = parseInt(import.meta.env.VITE_PLAN_REWARD_RATE, 10) || 20; // Default to 20%
+const MIN_COMPOUND_AMOUNT = BigInt(import.meta.env.VITE_MIN_COMPOUND_AMOUNT || (5 * 10 ** USDT_DECIMALS)); // Default to 5 USDT in wei
 
 // Validate environment variables
 const requiredEnvVars = {
@@ -45,8 +46,11 @@ const requiredEnvVars = {
   VITE_STAKING_ADDRESS: STAKING_ADDRESS,
   VITE_RPC_URL: RPC_URL,
   VITE_RELAYER_URL: RELAYER_URL,
+  VITE_API_BASE_URL: API_BASE_URL,
   VITE_STAKING_DEPLOYMENT_BLOCK: DEPLOYMENT_BLOCK.toString(),
   VITE_USDT_DECIMALS: USDT_DECIMALS.toString(),
+  VITE_PLAN_REWARD_RATE: PLAN_REWARD_RATE.toString(),
+  VITE_MIN_COMPOUND_AMOUNT: MIN_COMPOUND_AMOUNT.toString(),
 };
 
 const missingEnvVars = Object.entries(requiredEnvVars)
@@ -89,9 +93,67 @@ const stakingContract = new ethers.Contract(
 // Constants from StakingContract
 const BLOCKS_PER_DAY = 6646;
 const PLAN_DURATION = 5 * BLOCKS_PER_DAY; // 33230 blocks
-const PLAN_REWARD_RATE = 13; // 13%
-const MAX_DAILY_WITHDRAWAL = BigInt(150 * 10 ** USDT_DECIMALS); // 150 USDT in wei
-const MIN_COMPOUND_AMOUNT = BigInt(10 * 10 ** USDT_DECIMALS); // 10 USDT in wei
+
+// Check suspension status
+const checkSuspensionStatus = async (userAddress) => {
+  if (!ethers.isAddress(userAddress)) {
+    console.error("Rewards.jsx: Invalid user address:", userAddress);
+    return { isSuspended: false, reason: null };
+  }
+
+  const maxRetries = 3;
+  const retryDelay = 1000; // 1 second
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(
+        "Fetching suspension status for:",
+        `${API_BASE_URL}/api/check-suspension/${userAddress.toLowerCase()}`
+      );
+      const response = await fetch(
+        `${API_BASE_URL}/api/check-suspension/${userAddress.toLowerCase()}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Rewards.jsx: Suspension check error", {
+          status: response.status,
+          errorText,
+          attempt,
+        });
+        if (response.status === 404) {
+          console.warn(
+            "Suspension API endpoint not found. Check server route: /api/check-suspension/:address"
+          );
+        }
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("Rewards.jsx: Suspension status fetched", data);
+      return data; // { isSuspended: boolean, reason: string, suspendedAt: Date }
+    } catch (err) {
+      console.error("Rewards.jsx: Failed to check suspension status:", {
+        message: err.message,
+        stack: err.stack,
+        attempt,
+      });
+
+      if (attempt === maxRetries) {
+        console.warn("Rewards.jsx: Max retries reached for suspension check");
+        return { isSuspended: false, reason: null }; // Default to not suspended
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+    }
+  }
+};
 
 // Custom debounce function
 const debounce = (func, wait) => {
@@ -104,7 +166,7 @@ const debounce = (func, wait) => {
 
   debounced.cancel = () => {
     clearTimeout(timeout);
-    timeout = null; // Optional: Reset timeout to null for clarity
+    timeout = null;
   };
 
   return debounced;
@@ -244,8 +306,12 @@ export default function Rewards() {
   const [selectedStake, setSelectedStake] = useState(null);
   const [pendingTx, setPendingTx] = useState(null);
   const [claimHistory, setClaimHistory] = useState([]);
+  const [isSuspended, setIsSuspended] = useState({
+    isSuspended: false,
+    reason: null,
+  });
 
-  // Set app element for modal
+  // Set app element for modal and check suspension status
   useEffect(() => {
     try {
       ReactModal.setAppElement("#root");
@@ -254,7 +320,18 @@ export default function Rewards() {
       setError(err);
       setIsLoading(false);
     }
-  }, []);
+
+    if (account?.address && ethers.isAddress(account.address)) {
+      checkSuspensionStatus(account.address)
+        .then((suspension) => {
+          setIsSuspended(suspension);
+        })
+        .catch((err) => {
+          console.error("Rewards.jsx: Initial suspension check failed:", err);
+          setIsSuspended({ isSuspended: false, reason: null });
+        });
+    }
+  }, [account]);
 
   // Fetch stakes with retries and validation
   const fetchStakes = async (accountAddress, count) => {
@@ -373,15 +450,14 @@ export default function Rewards() {
     try {
       const startTime = performance.now();
       const latestBlock = await withRetry(() => provider.getBlockNumber());
-      const fromBlock = DEPLOYMENT_BLOCK; // Always start from deployment block
-      const blockChunkSize = 250; // Smaller for Hardhat
+      const fromBlock = DEPLOYMENT_BLOCK;
+      const blockChunkSize = 250;
       const allEvents = [];
 
       console.log(
         `Fetching RewardWithdrawn events from block ${fromBlock} to ${latestBlock}`
       );
 
-      // Create block chunk queries
       const chunkPromises = [];
       for (
         let startBlock = fromBlock;
@@ -415,7 +491,6 @@ export default function Rewards() {
         );
       }
 
-      // Execute queries in parallel, with concurrency limit
       const chunkEvents = await Promise.all(chunkPromises);
       chunkEvents.forEach((events) => allEvents.push(...events));
 
@@ -493,6 +568,7 @@ export default function Rewards() {
       return [];
     }
   };
+
   // Fetch current block number
   const fetchCurrentBlock = async () => {
     try {
@@ -597,7 +673,7 @@ export default function Rewards() {
 
   useEffect(() => {
     debouncedUpdateState();
-    const intervalId = setInterval(debouncedUpdateState, 60000); // Poll every 60 seconds
+    const intervalId = setInterval(debouncedUpdateState, 60000);
     console.log("Started state update interval, ID:", intervalId);
     return () => {
       console.log("Clearing state update interval, ID:", intervalId);
@@ -671,6 +747,7 @@ export default function Rewards() {
             stakeIndices: stakeIndices.map((i) => i.toString()),
             nonce: nonce.toString(),
             deadline: deadline.toString(),
+
           }
         : {
             user: account.address,
@@ -735,7 +812,6 @@ export default function Rewards() {
         ? [message.user, message.stakeIndices, message.deadline]
         : [message.user, message.stakeIndex, message.deadline];
 
-    // Split signature into v, r, s
     const sig = ethers.Signature.from(signature);
     const fullArgs = [...args, sig.v, sig.r, sig.s];
 
@@ -751,7 +827,7 @@ export default function Rewards() {
       const requestBody = {
         contractAddress: STAKING_ADDRESS,
         functionName,
-        args: fullArgs, // Use fullArgs with v, r, s
+        args: fullArgs,
         userAddress: account.address,
         signature,
         chainId: parseInt(import.meta.env.VITE_CHAIN_ID, 10),
@@ -859,7 +935,24 @@ export default function Rewards() {
       status: getStakeStatus(stake).label,
     });
 
-    // Validate stake state directly from contract
+    // Check suspension status
+    try {
+      const suspension = await checkSuspensionStatus(account.address);
+      if (suspension.isSuspended) {
+        console.log("handleClaimRewards: User is suspended", suspension);
+        toast.error(
+          `Your account is suspended. Reason: ${
+            suspension.reason || "Not provided"
+          }.`
+        );
+        return;
+      }
+    } catch (err) {
+      console.error("handleClaimRewards: Suspension check failed:", err);
+      toast.error("Failed to verify account status. Please try again.");
+      return;
+    }
+
     try {
       const contractStake = await stakingContract.stakes(
         account.address,
@@ -879,7 +972,7 @@ export default function Rewards() {
         0n
       ) {
         console.log("handleClaimRewards: No rewards to claim");
-        toast.error("No rewards to claim for this stake.");
+        toast.error("No rewards to_claim for this stake.");
         return;
       }
       if (
@@ -917,15 +1010,6 @@ export default function Rewards() {
       return;
     }
 
-    const currentTime = BigInt(Math.floor(Date.now() / 1000));
-    const currentDay = currentTime / BigInt(86400);
-    const stakeDay = stake.firstWithdrawalDay / BigInt(86400);
-    const withdrawnInADay = stakeDay < currentDay ? 0n : stake.withdrawnInADay;
-    if (withdrawnInADay + totalReward > MAX_DAILY_WITHDRAWAL) {
-      console.log("handleClaimRewards: Daily withdrawal limit exceeded");
-      toast.error("Daily withdrawal limit exceeded.");
-      return;
-    }
     if (pendingTx) {
       console.log("handleClaimRewards: Transaction already pending");
       toast.error("A transaction is already pending. Please wait.");
@@ -967,25 +1051,17 @@ export default function Rewards() {
         { id: toastId }
       );
 
-      // Optimistically update the stakes state
       const updatedStakes = stakes.map((s) =>
         s.id === stakeId
           ? {
               ...s,
               accruedReward: 0n,
               pendingReward: 0n,
-              withdrawnInADay:
-                stakeDay < currentDay
-                  ? totalReward
-                  : s.withdrawnInADay + totalReward,
-              firstWithdrawalDay:
-                stakeDay < currentDay ? currentTime : s.firstWithdrawalDay,
             }
           : s
       );
       setStakes(updatedStakes);
 
-      // Re-fetch stakes to ensure state is in sync with contract
       const count = await stakingContract.getUserStakeCount(account.address);
       const newStakes = await fetchStakes(account.address, Number(count));
       setStakes(newStakes);
@@ -1001,6 +1077,8 @@ export default function Rewards() {
         errorMessage = "Invalid signature. Please try again.";
       } else if (err.message.includes("Insufficient accrued rewards")) {
         errorMessage = "Insufficient rewards to claim.";
+      } else if (err.message.includes("Account is suspended")) {
+        errorMessage = err.message;
       }
       toast.error(errorMessage, { id: toastId });
     } finally {
@@ -1010,6 +1088,23 @@ export default function Rewards() {
 
   // Handle claim all rewards
   const handleClaimAllRewards = async () => {
+    try {
+      const suspension = await checkSuspensionStatus(account.address);
+      if (suspension.isSuspended) {
+        console.log("handleClaimAllRewards: User is suspended", suspension);
+        toast.error(
+          `Your account is suspended. Reason: ${
+            suspension.reason || "Not provided"
+          }.`
+        );
+        return;
+      }
+    } catch (err) {
+      console.error("handleClaimAllRewards: Suspension check failed:", err);
+      toast.error("Failed to verify account status. Please try again.");
+      return;
+    }
+
     const eligibleStakes = stakes.filter(
       (stake) => stake.accruedReward + stake.pendingReward > 0n
     );
@@ -1022,7 +1117,7 @@ export default function Rewards() {
       eligibleStakes: eligibleStakes.map((s) => ({
         id: s.id,
         amountWei: s.amountWei.toString(),
-        accruedReward: formatUSDT(s.accruedReward),
+        accruedReward: formatUSDT(s.accruedReward), // Corrected line
         pendingReward: formatUSDT(s.pendingReward),
       })),
     });
@@ -1030,18 +1125,6 @@ export default function Rewards() {
     if (totalClaimable <= 0n) {
       console.log("handleClaimAllRewards: No rewards to claim");
       toast.error("No rewards to claim.");
-      return;
-    }
-
-    const currentTime = BigInt(Math.floor(Date.now() / 1000));
-    const currentDay = currentTime / BigInt(86400);
-    const totalWithdrawnToday = eligibleStakes.reduce((sum, stake) => {
-      const stakeDay = stake.firstWithdrawalDay / BigInt(86400);
-      return sum + (stakeDay < currentDay ? 0n : stake.withdrawnInADay);
-    }, 0n);
-    if (totalWithdrawnToday + totalClaimable > MAX_DAILY_WITHDRAWAL) {
-      console.log("handleClaimAllRewards: Daily withdrawal limit exceeded");
-      toast.error("Daily withdrawal limit exceeded.");
       return;
     }
 
@@ -1088,28 +1171,18 @@ export default function Rewards() {
       console.log("Batch Withdraw Transaction Hash:", result.txHash);
       toast.success(`Successfully withdrew all rewards!`, { id: toastId });
 
-      // Optimistically update the stakes state
       const updatedStakes = stakes.map((stake) => {
         if (stakeIndices.includes(stake.id)) {
-          const stakeDay = stake.firstWithdrawalDay / BigInt(86400);
-          const totalReward = stake.accruedReward + stake.pendingReward;
           return {
             ...stake,
             accruedReward: 0n,
             pendingReward: 0n,
-            withdrawnInADay:
-              stakeDay < currentDay
-                ? totalReward
-                : stake.withdrawnInADay + totalReward,
-            firstWithdrawalDay:
-              stakeDay < currentDay ? currentTime : stake.firstWithdrawalDay,
           };
         }
         return stake;
       });
       setStakes(updatedStakes);
 
-      // Re-fetch stakes to ensure state is in sync with contract
       const count = await stakingContract.getUserStakeCount(account.address);
       const newStakes = await fetchStakes(account.address, Number(count));
       setStakes(newStakes);
@@ -1123,12 +1196,15 @@ export default function Rewards() {
         errorMessage = "Wallet not connected. Please reconnect.";
       } else if (err.message.includes("Invalid signature")) {
         errorMessage = "Invalid signature. Please try again.";
+      } else if (err.message.includes("Account is suspended")) {
+        errorMessage = err.message;
       }
       toast.error(errorMessage, { id: toastId });
     } finally {
       setIsBatchWithdrawLoading(false);
     }
   };
+
   // Handle compound
   const handleCompound = async (stakeId) => {
     const stake = stakes.find((s) => s.id === stakeId);
@@ -1140,7 +1216,23 @@ export default function Rewards() {
       status: getStakeStatus(stake).label,
     });
 
-    // Validate stake state
+    try {
+      const suspension = await checkSuspensionStatus(account.address);
+      if (suspension.isSuspended) {
+        console.log("handleCompound: User is suspended", suspension);
+        toast.error(
+          `Your account is suspended. Reason: ${
+            suspension.reason || "Not provided"
+          }.`
+        );
+        return;
+      }
+    } catch (err) {
+      console.error("handleCompound: Suspension check failed:", err);
+      toast.error("Failed to verify account status. Please try again.");
+      return;
+    }
+
     try {
       const contractStake = await stakingContract.stakes(
         account.address,
@@ -1203,7 +1295,6 @@ export default function Rewards() {
       console.log("Compound Transaction Hash:", result.txHash);
       toast.success("Successfully compounded rewards!", { id: toastId });
 
-      // Optimistically update the stakes state
       const updatedStakes = stakes.map((s) =>
         s.id === stakeId
           ? {
@@ -1217,7 +1308,6 @@ export default function Rewards() {
       );
       setStakes(updatedStakes);
 
-      // Re-fetch stakes to ensure state is in sync with contract
       const count = await stakingContract.getUserStakeCount(account.address);
       const newStakes = await fetchStakes(account.address, Number(count));
       setStakes(newStakes);
@@ -1231,6 +1321,8 @@ export default function Rewards() {
         errorMessage = "Wallet not connected. Please reconnect.";
       } else if (err.message.includes("Invalid signature")) {
         errorMessage = "Invalid signature. Please try again.";
+      } else if (err.message.includes("Account is suspended")) {
+        errorMessage = err.message;
       }
       toast.error(errorMessage, { id: toastId });
     } finally {
@@ -1293,6 +1385,17 @@ export default function Rewards() {
   console.log("Rendering main UI");
   return (
     <div className="max-w-full px-4 sm:px-6 lg:px-8 py-8 bg-slate-900 min-w-0">
+      {isSuspended.isSuspended && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="bg-red-500/20 text-red-200 p-3 rounded-md mb-4 font-geist-mono text-xs sm:text-sm"
+        >
+          Your account is suspended. Reason:{" "}
+          {isSuspended.reason || "Not provided"}.
+        </motion.div>
+      )}
       <motion.h2
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -1302,7 +1405,6 @@ export default function Rewards() {
         Rewards
       </motion.h2>
 
-      {/* Rewards Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-6 sm:mb-8 w-full">
         <motion.div
           variants={cardVariants}
@@ -1336,6 +1438,7 @@ export default function Rewards() {
             onClick={handleClaimAllRewards}
             disabled={
               isBatchWithdrawLoading ||
+              isSuspended.isSuspended ||
               stakes.reduce(
                 (sum, stake) => sum + stake.accruedReward + stake.pendingReward,
                 0n
@@ -1343,6 +1446,7 @@ export default function Rewards() {
             }
             className={`group flex items-center justify-center px-4 sm:px-6 py-2 sm:py-2.5 bg-slate-800 text-cyan-600 border border-cyan-600 rounded-md hover:bg-slate-700 transition-all duration-300 w-full sm:w-auto text-xs sm:text-sm ${
               isBatchWithdrawLoading ||
+              isSuspended.isSuspended ||
               stakes.reduce(
                 (sum, stake) => sum + stake.accruedReward + stake.pendingReward,
                 0n
@@ -1411,13 +1515,13 @@ export default function Rewards() {
                 legend: {
                   labels: {
                     color: "#e2e8f0",
-                    font: { size: 10, sm: 12, family: "Geist Mono" },
+                    font: { size: 10, family: "Geist Mono" },
                   },
                 },
                 tooltip: {
                   backgroundColor: "rgba(30, 41, 59, 0.9)",
-                  titleFont: { size: 10, sm: 12, family: "Geist Mono" },
-                  bodyFont: { size: 10, sm: 12, family: "Geist Mono" },
+                  titleFont: { size: 10, family: "Geist Mono" },
+                  bodyFont: { size: 10, family: "Geist Mono" },
                   callbacks: {
                     label: (context) =>
                       `${context.dataset.label}: ${context.parsed.y.toFixed(
@@ -1430,14 +1534,14 @@ export default function Rewards() {
                 x: {
                   ticks: {
                     color: "#e2e8f0",
-                    font: { size: 10, sm: 12, family: "Geist Mono" },
+                    font: { size: 10, family: "Geist Mono" },
                   },
                   grid: { color: "rgba(103, 232, 249, 0.1)" },
                 },
                 y: {
                   ticks: {
                     color: "#e2e8f0",
-                    font: { size: 10, sm: 12, family: "Geist Mono" },
+                    font: { size: 10, family: "Geist Mono" },
                   },
                   grid: { color: "rgba(103, 232, 249, 0.1)" },
                 },
@@ -1532,7 +1636,7 @@ export default function Rewards() {
                     </td>
                     <td className="py-1.5 sm:py-2 px-1 sm:px-2 md:px-3">
                       <span
-                        className={`inline-block px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full text-xs sm:text-sm ${color} text-slate-200`}
+                        className={`inline-block px-2 py-1 rounded-full text-xs sm:text-sm ${color} text-slate-200`}
                       >
                         {label}
                       </span>
@@ -1542,10 +1646,12 @@ export default function Rewards() {
                         onClick={() => handleClaimRewards(stake.id)}
                         disabled={
                           isWithdrawLoading ||
+                          isSuspended.isSuspended ||
                           stake.accruedReward + stake.pendingReward <= 0n
                         }
                         className={`text-xs sm:text-sm text-cyan-600 hover:underline ${
                           isWithdrawLoading ||
+                          isSuspended.isSuspended ||
                           stake.accruedReward + stake.pendingReward <= 0n
                             ? "opacity-50 cursor-not-allowed"
                             : ""
@@ -1566,12 +1672,14 @@ export default function Rewards() {
                         onClick={() => handleCompound(stake.id)}
                         disabled={
                           isCompoundLoading ||
+                          isSuspended.isSuspended ||
                           stake.amountWei <= 0n ||
                           stake.accruedReward + stake.pendingReward <
                             MIN_COMPOUND_AMOUNT
                         }
                         className={`text-xs sm:text-sm text-cyan-600 hover:underline ${
                           isCompoundLoading ||
+                          isSuspended.isSuspended ||
                           stake.amountWei <= 0n ||
                           stake.accruedReward + stake.pendingReward <
                             MIN_COMPOUND_AMOUNT
@@ -1684,7 +1792,6 @@ export default function Rewards() {
         )}
       </motion.div>
 
-      {/* Modal for stake details */}
       <ReactModal
         isOpen={!!selectedStake}
         onRequestClose={() => setSelectedStake(null)}

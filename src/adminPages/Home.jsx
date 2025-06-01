@@ -2042,47 +2042,7 @@ export function AdminHome() {
         className="bg-slate-800/90 text-slate-200 text-xs sm:text-sm font-geist-mono rounded-lg p-2"
       />
 
-      {/* Toaster */}
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          style: {
-            background: "#1e293b",
-            color: "#e2e8f0",
-            fontFamily: "Geist Mono",
-            fontSize: "14px",
-            border: "1px solid #334155",
-            borderRadius: "8px",
-          },
-          success: {
-            style: {
-              borderColor: "#14b8a6",
-            },
-            iconTheme: {
-              primary: "#14b8a6",
-              secondary: "#1e293b",
-            },
-          },
-          error: {
-            style: {
-              borderColor: "#f43f5e",
-            },
-            iconTheme: {
-              primary: "#f43f5e",
-              secondary: "#1e293b",
-            },
-          },
-          loading: {
-            style: {
-              borderColor: "#22d3ee",
-            },
-            iconTheme: {
-              primary: "#22d3ee",
-              secondary: "#1e293b",
-            },
-          },
-        }}
-      />
+  
     </div>
   );
 }

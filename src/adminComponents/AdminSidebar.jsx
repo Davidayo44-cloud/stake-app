@@ -18,7 +18,7 @@ export function AdminSidebar({
   const links = [
     { href: "/admin", label: "Overview", icon: Shield, exact: true },
     { href: "/admin/manage-pool", label: "Manage Pool", icon: DollarSign },
-    { href: "/admin/controls", label: "Contract Controls", icon: Settings },
+    { href: "/admin/controls", label: "Controls", icon: Settings },
   ];
 
   const handleToggleCollapse = () => {

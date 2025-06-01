@@ -32,7 +32,7 @@ import {
 import { getContract, defineChain } from "thirdweb";
 import { createThirdwebClient } from "thirdweb";
 import { ethers } from "ethers";
-import { MockUSDTABI, USDTABI,StakingContractABI } from "../config/abis";
+import { USDTABI, StakingContractABI } from "../config/abis";
 
 // Register Chart.js components
 ChartJS.register(
@@ -45,12 +45,15 @@ ChartJS.register(
   Legend
 );
 
-// Constants
+// Environment variables
 const USDT_DECIMALS = parseInt(import.meta.env.VITE_USDT_DECIMALS, 10) || 18;
-const PLAN_REWARD_RATE = 13; // 13% over 5 days
+const PLAN_REWARD_RATE =
+  parseInt(import.meta.env.VITE_PLAN_REWARD_RATE, 10) || 20; // Default to 20%
 const DAY_IN_SECONDS = 86400;
 const PLAN_DURATION = 5 * DAY_IN_SECONDS; // 5 days in seconds
-const REFERRAL_WITHDRAW_THRESHOLD = BigInt(5 * 10 ** USDT_DECIMALS); // 5 USDT in wei
+const REFERRAL_WITHDRAW_THRESHOLD = BigInt(
+  import.meta.env.VITE_MIN_REFERRAL_WITHDRAWAL || 5 * 10 ** USDT_DECIMALS
+); // 5 USDT in wei
 
 // Validate environment variables
 const requiredEnvVars = {
@@ -64,6 +67,9 @@ const requiredEnvVars = {
   VITE_NATIVE_CURRENCY_SYMBOL: import.meta.env.VITE_NATIVE_CURRENCY_SYMBOL,
   VITE_NATIVE_CURRENCY_DECIMALS: import.meta.env.VITE_NATIVE_CURRENCY_DECIMALS,
   VITE_USDT_DECIMALS: import.meta.env.VITE_USDT_DECIMALS,
+  VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
+  VITE_PLAN_REWARD_RATE: PLAN_REWARD_RATE.toString(),
+  VITE_MIN_REFERRAL_WITHDRAWAL: REFERRAL_WITHDRAW_THRESHOLD.toString(),
 };
 
 const missingEnvVars = Object.entries(requiredEnvVars)
@@ -82,6 +88,15 @@ if (missingEnvVars.length > 0) {
   );
 }
 
+// Validate PLAN_REWARD_RATE
+if (PLAN_REWARD_RATE <= 0) {
+  console.error(
+    "DashboardHome.jsx: Invalid PLAN_REWARD_RATE:",
+    PLAN_REWARD_RATE
+  );
+  throw new Error("PLAN_REWARD_RATE must be a positive number.");
+}
+
 const {
   VITE_THIRDWEB_CLIENT_ID,
   VITE_USDT_ADDRESS,
@@ -92,6 +107,7 @@ const {
   VITE_NATIVE_CURRENCY_NAME,
   VITE_NATIVE_CURRENCY_SYMBOL,
   VITE_NATIVE_CURRENCY_DECIMALS,
+  VITE_API_BASE_URL,
 } = requiredEnvVars;
 
 // Validate contract addresses
@@ -130,7 +146,7 @@ const client = createThirdwebClient({
   clientId: VITE_THIRDWEB_CLIENT_ID,
 });
 
-// Define Hardhat chain
+// Define chain
 const hardhatChain = defineChain({
   id: chainId,
   rpc: VITE_RPC_URL,
@@ -148,7 +164,6 @@ const usdtContract = getContract({
   chain: hardhatChain,
   address: VITE_USDT_ADDRESS,
   abi: USDTABI,
-  rpcOverride: VITE_RPC_URL,
 });
 
 const stakingContract = getContract({
@@ -156,8 +171,60 @@ const stakingContract = getContract({
   chain: hardhatChain,
   address: VITE_STAKING_ADDRESS,
   abi: StakingContractABI,
-  rpcOverride: VITE_RPC_URL,
 });
+
+// Check suspension status
+const checkSuspensionStatus = async (userAddress) => {
+  if (!ethers.isAddress(userAddress)) {
+    console.error("DashboardHome.jsx: Invalid user address:", userAddress);
+    return { isSuspended: false, reason: null };
+  }
+
+  const maxRetries = 3;
+  const retryDelay = 1000;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(
+        `${VITE_API_BASE_URL}/api/check-suspension/${userAddress.toLowerCase()}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("DashboardHome.jsx: Suspension check error", {
+          status: response.status,
+          errorText,
+          attempt,
+        });
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("DashboardHome.jsx: Suspension status fetched", data);
+      return data;
+    } catch (err) {
+      console.error("DashboardHome.jsx: Failed to check suspension status:", {
+        message: err.message,
+        attempt,
+      });
+
+      if (attempt === maxRetries) {
+        console.warn(
+          "DashboardHome.jsx: Max retries reached for suspension check"
+        );
+        return { isSuspended: false, reason: null };
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+    }
+  }
+};
 
 // Utility to format USDT
 const formatUSDT = (value) => {
@@ -265,6 +332,10 @@ export default function DashboardHome() {
   const [referrals, setReferrals] = useState([]);
   const [totalPendingRewards, setTotalPendingRewards] = useState(0n);
   const [totalAccruedRewards, setTotalAccruedRewards] = useState(0n);
+  const [isSuspended, setIsSuspended] = useState({
+    isSuspended: false,
+    reason: null,
+  });
 
   // Contract data hooks
   const {
@@ -300,6 +371,23 @@ export default function DashboardHome() {
       refetchInterval: 10000,
     },
   });
+
+  // Check suspension status on mount
+  useEffect(() => {
+    if (account?.address && ethers.isAddress(account.address)) {
+      checkSuspensionStatus(account.address)
+        .then((suspension) => {
+          setIsSuspended(suspension);
+        })
+        .catch((err) => {
+          console.error(
+            "DashboardHome.jsx: Initial suspension check failed:",
+            err
+          );
+          setIsSuspended({ isSuspended: false, reason: null });
+        });
+    }
+  }, [account]);
 
   // Fetch stakes
   const fetchStakes = async (accountAddress, count) => {
@@ -749,6 +837,17 @@ export default function DashboardHome() {
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8 w-full bg-slate-900 max-w-full min-w-0">
+      {isSuspended.isSuspended && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="bg-red-500/20 text-red-200 p-3 rounded-md mb-4 font-geist-mono text-xs sm:text-sm"
+        >
+          Your account is suspended. Reason:{" "}
+          {isSuspended.reason || "Not provided"}.
+        </motion.div>
+      )}
       <motion.h2
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -789,7 +888,7 @@ export default function DashboardHome() {
           },
         ].map((item, index) => (
           <motion.div
-            key={item.label}
+            key={index}
             variants={cardVariants}
             initial="initial"
             animate={cardVariants.animate(index)}
