@@ -1609,10 +1609,7 @@ export default function Staking() {
                   Please enter a valid amount
                 </p>
               )}
-              <p className="text-slate-400 text-xs mt-1 font-geist-mono">
-                You need at least 1 USDT worth of BNB for gas fees to approve
-                staking.
-              </p>
+         
             </div>
             <button
               onClick={handleContactAdmin}
