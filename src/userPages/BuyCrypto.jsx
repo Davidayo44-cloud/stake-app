@@ -55,23 +55,25 @@ const BuyCrypto = () => {
   const [transactionStatus, setTransactionStatus] = useState("");
   const [isButtonLoading, setIsButtonLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [transakUrl, setTransakUrl] = useState("");
 
-  // Your Transak API configuration
+  // Transak API configuration
   const TRANSAK_CONFIG = {
-    apiKey: "56f0d5e4-5b20-4f2b-adf2-c0969129a0ce", // Your staging API key
+    apiKey: "d3cb6f51-df24-4083-9781-a5ae0b058a68", // Staging API key
     environment: "STAGING", // Change to 'PRODUCTION' when ready
     fiatCurrency: "NGN", // Nigerian Naira
-    cryptoCurrencyList: "ETH,BTC,USDT,USDC,BNB", // Supported cryptocurrencies
+    defaultFiatCurrency: "NGN", // Enforce NGN as default
+    cryptoCurrencyList: "ETH,BTC,USDT,USDC,BNB",
     networks: "ethereum,bsc,polygon",
     defaultCryptoCurrency: "ETH",
     defaultNetwork: "ethereum",
     walletAddress: walletAddress,
-    redirectURL: window.location.origin,
+    redirectURL: `${window.location.origin}/transaction-status`,
     hideMenu: true,
     themeColor: "#fcba03",
   };
 
-  // Set wallet address from Thirdweb account
+  // Set wallet address and initialize modal
   useEffect(() => {
     try {
       ReactModal.setAppElement("#root");
@@ -95,7 +97,28 @@ const BuyCrypto = () => {
     }
   }, [account]);
 
-  // Initialize Transak widget
+  // Build Transak URL when wallet address changes
+  useEffect(() => {
+    if (walletAddress) {
+      const params = new URLSearchParams({
+        apiKey: TRANSAK_CONFIG.apiKey,
+        environment: TRANSAK_CONFIG.environment,
+        fiatCurrency: TRANSAK_CONFIG.fiatCurrency,
+        defaultFiatCurrency: TRANSAK_CONFIG.defaultFiatCurrency,
+        cryptoCurrencyList: TRANSAK_CONFIG.cryptoCurrencyList,
+        networks: TRANSAK_CONFIG.networks,
+        defaultCryptoCurrency: TRANSAK_CONFIG.defaultCryptoCurrency,
+        defaultNetwork: TRANSAK_CONFIG.defaultNetwork,
+        walletAddress: walletAddress,
+        redirectURL: TRANSAK_CONFIG.redirectURL,
+        hideMenu: TRANSAK_CONFIG.hideMenu,
+        themeColor: TRANSAK_CONFIG.themeColor,
+      });
+      setTransakUrl(`https://global-stg.transak.com/?${params.toString()}`);
+    }
+  }, [walletAddress]);
+
+  // Initialize Transak widget in modal
   const initTransak = () => {
     if (!walletAddress) {
       setTransactionStatus(
@@ -106,46 +129,101 @@ const BuyCrypto = () => {
       });
       return;
     }
-
     setIsButtonLoading(true);
+    setShowTransak(true);
+  };
 
-    // Build Transak URL with parameters
-    const params = new URLSearchParams({
-      apiKey: TRANSAK_CONFIG.apiKey,
-      environment: TRANSAK_CONFIG.environment,
-      fiatCurrency: TRANSAK_CONFIG.fiatCurrency,
-      cryptoCurrencyList: TRANSAK_CONFIG.cryptoCurrencyList,
-      networks: TRANSAK_CONFIG.networks,
-      defaultCryptoCurrency: TRANSAK_CONFIG.defaultCryptoCurrency,
-      defaultNetwork: TRANSAK_CONFIG.defaultNetwork,
-      walletAddress: walletAddress,
-      redirectURL: TRANSAK_CONFIG.redirectURL,
-      hideMenu: TRANSAK_CONFIG.hideMenu,
-      themeColor: TRANSAK_CONFIG.themeColor,
+  // Update localStorage order status
+  const updateOrderStatus = (orderId, status, data = {}) => {
+    try {
+      const storedPurchases = JSON.parse(
+        localStorage.getItem("purchaseHistory") || "[]"
+      );
+      const updatedPurchases = storedPurchases.map((order) => {
+        if (order.orderId === orderId) {
+          return {
+            ...order,
+            status,
+            fiatCurrency: data.fiatCurrency || order.fiatCurrency,
+            cryptoCurrency: data.cryptoCurrency || order.cryptoCurrency,
+            fiatAmount: data.fiatAmount || order.fiatAmount,
+            cryptoAmount: data.cryptoAmount || order.cryptoAmount,
+            walletAddress: data.walletAddress || order.walletAddress,
+            totalFeeInFiat: data.totalFeeInFiat || order.totalFeeInFiat,
+            network: data.network || order.network,
+            timestamp: data.createdAt || new Date().toISOString(),
+          };
+        }
+        return order;
+      });
+      localStorage.setItem("purchaseHistory", JSON.stringify(updatedPurchases));
+      window.dispatchEvent(new Event("storageUpdated"));
+      console.log(`Updated order ${orderId} to status: ${status}`);
+    } catch (err) {
+      console.error("Failed to update order status:", err);
+    }
+  };
+
+  // Poll Transak API for PROCESSING orders
+  useEffect(() => {
+    const pollOrderStatus = async (orderId) => {
+      try {
+        const response = await fetch(
+          `https://api-stg.transak.com/v2/public/orders/${orderId}`,
+          {
+            headers: {
+              "x-api-key": TRANSAK_CONFIG.apiKey,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const order = await response.json();
+        console.log(`Polled order ${orderId}:`, order);
+        if (
+          order.status === "COMPLETED" ||
+          order.status === "FAILED" ||
+          order.status === "CANCELLED"
+        ) {
+          updateOrderStatus(orderId, order.status, order);
+          setTransactionStatus(
+            `Order ${order.status.toLowerCase()}! Order ID: ${orderId}`
+          );
+          toast.success(
+            `Order ${order.status.toLowerCase()}! Order ID: ${orderId}`,
+            {
+              position: "top-right",
+            }
+          );
+          return true; // Stop polling
+        }
+        return false;
+      } catch (err) {
+        console.error(`Failed to poll order ${orderId}:`, err);
+        return false;
+      }
+    };
+
+    const storedPurchases = JSON.parse(
+      localStorage.getItem("purchaseHistory") || "[]"
+    );
+    const processingOrders = storedPurchases.filter(
+      (order) => order.status === "PROCESSING"
+    );
+    const intervals = processingOrders.map((order) => {
+      const intervalId = setInterval(async () => {
+        const shouldStop = await pollOrderStatus(order.orderId);
+        if (shouldStop) {
+          clearInterval(intervalId);
+        }
+      }, 60000); // Poll every minute
+      return intervalId;
     });
 
-    const transakURL = `https://global-stg.transak.com/?${params.toString()}`;
-
-    // Open Transak in new window
-    const transakWindow = window.open(
-      transakURL,
-      "transak",
-      "width=500,height=700,scrollbars=yes,resizable=yes"
-    );
-
-    setShowTransak(true);
-
-    // Listen for window close
-    const checkClosed = setInterval(() => {
-      if (transakWindow.closed) {
-        clearInterval(checkClosed);
-        setShowTransak(false);
-        setIsButtonLoading(false);
-        setTransactionStatus("Transaction window closed");
-        toast.info("Transaction window closed", { position: "top-right" });
-      }
-    }, 1000);
-  };
+    return () => intervals.forEach(clearInterval);
+  }, []);
 
   // Handle Transak events
   useEffect(() => {
@@ -153,21 +231,96 @@ const BuyCrypto = () => {
       if (event.origin !== "https://global-stg.transak.com") return;
 
       const { event_id, data } = event.data;
+      console.log("Transak event received:", {
+        event_id,
+        data: JSON.stringify(data, null, 2),
+      });
 
       switch (event_id) {
         case "TRANSAK_ORDER_SUCCESSFUL":
-          setTransactionStatus(`Order successful! Order ID: ${data.status.id}`);
-          toast.success(`Order successful! Order ID: ${data.status.id}`, {
+          if (!data.id || !data.fiatAmount || !data.cryptoAmount) {
+            console.error("Incomplete Transak order data:", data);
+            setTransactionStatus(
+              "Order processing but data is incomplete. Contact support."
+            );
+            toast.error(
+              "Order processing but data is incomplete. Contact support.",
+              {
+                position: "top-right",
+              }
+            );
+            setShowTransak(false);
+            setIsButtonLoading(false);
+            return;
+          }
+          setTransactionStatus(
+            `Order ${data.status.toLowerCase()}! Order ID: ${data.id}`
+          );
+          toast.success(
+            `Order ${data.status.toLowerCase()}! Order ID: ${data.id}`,
+            {
+              position: "top-right",
+            }
+          );
+          // Save to localStorage
+          const orderDetails = {
+            orderId: data.id,
+            fiatCurrency: data.fiatCurrency || "NGN",
+            cryptoCurrency: data.cryptoCurrency || "UNKNOWN",
+            fiatAmount: data.fiatAmount,
+            cryptoAmount: data.cryptoAmount,
+            status: data.status,
+            walletAddress: data.walletAddress || walletAddress,
+            totalFeeInFiat: data.totalFeeInFiat || "0",
+            network: data.network || "ethereum",
+            timestamp: data.createdAt || new Date().toISOString(),
+          };
+          console.log("Saving order details:", orderDetails);
+          const storedPurchases = JSON.parse(
+            localStorage.getItem("purchaseHistory") || "[]"
+          );
+          localStorage.setItem(
+            "purchaseHistory",
+            JSON.stringify([orderDetails, ...storedPurchases])
+          );
+          window.dispatchEvent(new Event("storageUpdated"));
+          setShowTransak(false);
+          setIsButtonLoading(false);
+          break;
+        case "TRANSAK_ORDER_COMPLETED":
+          if (!data.id) {
+            console.error("Incomplete Transak completion data:", data);
+            return;
+          }
+          console.log(
+            `Processing TRANSAK_ORDER_COMPLETED for order ${data.id}`
+          );
+          setTransactionStatus(`Order completed! Order ID: ${data.id}`);
+          toast.success(`Order completed! Order ID: ${data.id}`, {
             position: "top-right",
           });
+          updateOrderStatus(data.id, "COMPLETED", data);
           setShowTransak(false);
           setIsButtonLoading(false);
           break;
         case "TRANSAK_ORDER_FAILED":
-          setTransactionStatus("Transaction failed. Please try again.");
-          toast.error("Transaction failed. Please try again.", {
-            position: "top-right",
-          });
+          if (data.id) {
+            setTransactionStatus(
+              `Transaction failed for Order ID: ${data.id}. Please try again.`
+            );
+            toast.error(
+              `Transaction failed for Order ID: ${data.id}. Please try again.`,
+              {
+                position: "top-right",
+              }
+            );
+            updateOrderStatus(data.id, "FAILED", data);
+          } else {
+            setTransactionStatus("Transaction failed. Please try again.");
+            toast.error("Transaction failed. Please try again.", {
+              position: "top-right",
+            });
+          }
           setShowTransak(false);
           setIsButtonLoading(false);
           break;
@@ -176,6 +329,9 @@ const BuyCrypto = () => {
           toast.info("Transaction cancelled by user", {
             position: "top-right",
           });
+          if (data.id) {
+            updateOrderStatus(data.id, "CANCELLED", data);
+          }
           setShowTransak(false);
           setIsButtonLoading(false);
           break;
@@ -184,13 +340,14 @@ const BuyCrypto = () => {
           setIsButtonLoading(false);
           break;
         default:
+          console.log(`Unhandled Transak event: ${event_id}`);
           break;
       }
     };
 
     window.addEventListener("message", handleTransakEvents);
     return () => window.removeEventListener("message", handleTransakEvents);
-  }, []);
+  }, [walletAddress]);
 
   const formatAddress = (address) => {
     if (!address) return "";
@@ -276,7 +433,7 @@ const BuyCrypto = () => {
         <button
           onClick={initTransak}
           disabled={isButtonLoading || !walletAddress}
-          className="group flex items-center justify-center px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-green-500 to-blue-600 hover:from-green-600 hover:to-blue-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-md transition-all duration-300 text-xs sm:text-sm w-full relative"
+          className="group flex items-center justify-center px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-700/20 disabled:text-gray-400 transition-all duration-200 text-xs sm:text-sm w-full relative"
           data-tooltip-id="buy-tooltip"
           data-tooltip-content="Buy crypto using Transak"
         >
@@ -295,16 +452,20 @@ const BuyCrypto = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.4 }}
-          className={`bg-slate-800/40 backdrop-blur-sm p-3 sm:p-4 rounded-2xl border border-cyan-700/30 mb-8 max-w-full min-w-0 flex items-center ${
-            transactionStatus.includes("successful")
+          className={`bg-slate-800/40 backdrop-blur-sm p-3 sm:p-4 rounded-2xl border mb-8 max-w-full min-w-0 flex items-center ${
+            transactionStatus.includes("successful") ||
+            transactionStatus.includes("processing") ||
+            transactionStatus.includes("completed")
               ? "border-green-700/30"
               : transactionStatus.includes("failed") ||
                 transactionStatus.includes("error")
-              ? "border-red-700/30"
-              : "border-blue-700/30"
+              ? "border-red-600"
+              : "border-blue-600"
           }`}
         >
-          {transactionStatus.includes("successful") ? (
+          {transactionStatus.includes("successful") ||
+          transactionStatus.includes("processing") ||
+          transactionStatus.includes("completed") ? (
             <CheckCircle
               className="text-green-500 mr-2 flex-shrink-0"
               size={16}
@@ -312,7 +473,7 @@ const BuyCrypto = () => {
           ) : transactionStatus.includes("failed") ||
             transactionStatus.includes("error") ? (
             <AlertCircle
-              className="text-red-500 mr-2 flex-shrink-0"
+              className="text-red-600 mr-2 flex-shrink-0"
               size={16}
             />
           ) : (
@@ -323,12 +484,14 @@ const BuyCrypto = () => {
           )}
           <span
             className={`text-xs sm:text-sm font-geist-mono ${
-              transactionStatus.includes("successful")
-                ? "text-green-400"
+              transactionStatus.includes("successful") ||
+              transactionStatus.includes("processing") ||
+              transactionStatus.includes("completed")
+                ? "text-green-600"
                 : transactionStatus.includes("failed") ||
                   transactionStatus.includes("error")
-                ? "text-red-400"
-                : "text-blue-400"
+                ? "text-red-600"
+                : "text-blue-600"
             }`}
           >
             {transactionStatus}
@@ -336,36 +499,16 @@ const BuyCrypto = () => {
         </motion.div>
       )}
 
-      {/* Footer */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.5 }}
-        className="text-center text-slate-400 font-geist-mono text-xs sm:text-sm"
-      >
-        <p className="mb-2">
-          Powered by <strong>Transak</strong> - Secure crypto purchases
-        </p>
-        <a
-          href="https://transak.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center text-blue-600 hover:text-blue-800 underline"
-          data-tooltip-id="transak-tooltip"
-          data-tooltip-content="Visit Transak's website"
-        >
-          Learn more about Transak
-          <ExternalLink className="ml-1 w-4 h-4" />
-        </a>
-      </motion.div>
-
-      {/* Transaction Modal */}
+      {/* Transak Modal with Iframe */}
       <ReactModal
         isOpen={showTransak}
-        onRequestClose={() => setShowTransak(false)}
-        className="bg-slate-900 p-3 sm:p-4 md:p-6 rounded-2xl border border-cyan-700/30 max-w-[90vw] sm:max-w-md md:max-w-lg w-full mx-auto my-4 max-h-[80vh] overflow-y-auto"
+        onRequestClose={() => {
+          setShowTransak(false);
+          setIsButtonLoading(false);
+        }}
+        className="max-w-[90vw] sm:max-w-[600px] w-full mx-auto my-4 p-4 sm:p-6 md:p-8 bg-white rounded-2xl border-none max-h-[80vh] overflow-y-auto"
         overlayClassName="fixed inset-0 bg-black/70 flex items-center justify-center z-50"
-        shouldCloseOnOverlayClick={true}
+        shouldCloseOnOverlayClick={false}
         shouldCloseOnEsc={true}
       >
         <motion.div
@@ -374,47 +517,68 @@ const BuyCrypto = () => {
           animate="animate"
           exit="exit"
         >
-          <div className="flex justify-between items-center mb-3 sm:mb-4">
-            <h3 className="text-base sm:text-lg md:text-xl font-bold text-slate-200 font-geist">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg sm:text-xl font-bold text-gray-900">
               Transak Purchase
             </h3>
             <button
-              onClick={() => setShowTransak(false)}
-              className="text-slate-400 hover:text-blue-600"
+              onClick={() => {
+                setShowTransak(false);
+                setIsButtonLoading(false);
+              }}
+              className="text-gray-600 hover:text-blue-600"
             >
-              <X className="w-4 sm:w-5 md:w-6 h-4 sm:h-5 md:h-6" />
+              <X className="w-6 h-6" />
             </button>
           </div>
-          <p className="text-slate-200 font-geist-mono text-xs sm:text-sm">
-            The Transak purchase window has been opened. Complete the
-            transaction there and return here to see the status.
-          </p>
-          <button
-            onClick={() => setShowTransak(false)}
-            className="mt-4 px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white border border-blue-600 rounded-md hover:bg-blue-700 transition-all duration-300 text-xs sm:text-sm w-full"
-          >
-            Close
-          </button>
+          <iframe
+            src={transakUrl}
+            className="w-full h-[500px] border-none"
+            title="Transak Purchase Widget"
+          />
         </motion.div>
       </ReactModal>
+
+      {/* Footer */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="text-center text-slate-400 font-geist-mono"
+      >
+        <p className="mb-2">
+          Powered by <strong>Transak</strong> - Secure crypto purchases
+        </p>
+        <a
+          href="https://transak.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center text-blue-600 hover:text-blue-800"
+          data-tooltip-id="transak-tooltip"
+          data-tooltip-content="Visit Transak's website"
+        >
+          Learn more about Transak
+          <ExternalLink className="ml-1 w-4 h-4" />
+        </a>
+      </motion.div>
 
       <Tooltip
         id="card-tooltip"
         place="top"
-        className="bg-slate-800 text-blue-600 text-xs sm:text-sm max-w-[200px] break-words z-50"
-        style={{ fontFamily: "Geist Mono" }}
+        className="bg-gray-800 text-blue-400 text-sm max-w-xs break-all"
+        style={{ fontFamily: "Geist" }}
       />
       <Tooltip
         id="buy-tooltip"
         place="top"
-        className="bg-slate-800 text-blue-600 text-xs sm:text-sm max-w-[200px] break-words z-50"
-        style={{ fontFamily: "Geist Mono" }}
+        className="bg-gray-800 text-blue-400 text-sm max-w-xs break-all"
+        style={{ fontFamily: "Geist" }}
       />
       <Tooltip
         id="transak-tooltip"
         place="top"
-        className="bg-slate-800 text-blue-600 text-xs sm:text-sm max-w-[200px] break-words z-50"
-        style={{ fontFamily: "Geist Mono" }}
+        className="bg-gray-800 text-blue-400 text-sm max-w-xs break-all"
+        style={{ fontFamily: "Geist" }}
       />
     </div>
   );

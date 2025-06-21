@@ -23,6 +23,7 @@ export default function Sidebar({
     { href: "/dashboard/rewards", label: "Rewards", icon: Gift },
     { href: "/dashboard/referrals", label: "Referrals", icon: Users },
     // { href: "/dashboard/buy", label: "Buy", icon: BadgeDollarSign },
+    // { href: "/dashboard/purchase", label: "Transactions", icon: BadgeDollarSign },
   ];
 
   const handleToggleCollapse = () => {

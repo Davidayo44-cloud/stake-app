@@ -7,12 +7,14 @@ import DashboardLayout from "./DashboardLayout";
 import Staking from "./userPages/Staking";
 import Referrals from "./userPages/Referrals";
 import Rewards from "./userPages/Rewards";
+// import PurchaseHistory from "./userPages/PurchaseHistory";
 import DashboardHome from "./userPages/DashboardHome";
 import { AdminLayout } from "./AdminLayout";
 import { AdminHome } from "./adminPages/Home";
 import { ManagePool } from "./adminPages/ManagePool";
 import { ContractControls } from "./adminPages/ContractControls";
-import BuyCrypto from "./userPages/BuyCrypto";
+// import BuyCrypto from "./userPages/BuyCrypto";
+// import TransactionStatus from "./components/TransactionStatus"; // New component
 import NotFound from "./pages/NotFound";
 
 // Validate environment variables
@@ -23,7 +25,8 @@ const requiredEnvVars = {
   VITE_NATIVE_CURRENCY_NAME: import.meta.env.VITE_NATIVE_CURRENCY_NAME,
   VITE_NATIVE_CURRENCY_SYMBOL: import.meta.env.VITE_NATIVE_CURRENCY_SYMBOL,
   VITE_NATIVE_CURRENCY_DECIMALS: import.meta.env.VITE_NATIVE_CURRENCY_DECIMALS,
-};
+}
+
 
 const missingEnvVars = Object.entries(requiredEnvVars)
   .filter(([_, value]) => !value)
@@ -107,12 +110,18 @@ export default function App() {
       <div className="min-h-screen">
         <Routes>
           <Route path="/" element={<Home />} />
+          {/* <Route
+            path="/transaction-status"
+            element={<TransactionStatus />}
+          />{" "} */}
+          {/* New route */}
           <Route path="/dashboard" element={<DashboardLayout />}>
             <Route index element={<DashboardHome />} />
             <Route path="staking" element={<Staking />} />
             <Route path="referrals" element={<Referrals />} />
             <Route path="rewards" element={<Rewards />} />
             {/* <Route path="buy" element={<BuyCrypto />} /> */}
+            {/* <Route path="purchase" element={<PurchaseHistory />} /> */}
           </Route>
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminHome />} />

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Transak } from "@transak/transak-sdk";
+import { MessageSquare } from "lucide-react";
 import { useActiveAccount } from "thirdweb/react";
 import {
   createThirdwebClient,
@@ -193,6 +193,10 @@ export default function Staking() {
     StakingContractABI,
     provider
   );
+
+  const handleContactAdmin = () => {
+    window.open("https://t.me/stakerm", "_blank");
+  };
 
   // Handle referral logic
   useEffect(() => {
@@ -1610,6 +1614,18 @@ export default function Staking() {
                 staking.
               </p>
             </div>
+            <button
+              onClick={handleContactAdmin}
+              disabled={isActionLoading || !account || isSuspended.isSuspended}
+              className={`group w-full flex items-center justify-center px-3 sm:px-4 md:px-6 py-1.5 sm:py-2 bg-slate-800 text-cyan-600 border border-cyan-600 rounded-md hover:bg-slate-700 transition-all duration-300 text-xs sm:text-sm ${
+                isActionLoading || !account || isSuspended.isSuspended
+                  ? "opacity-50 cursor-not-allowed"
+                  : ""
+              }`}
+            >
+              Contact Admin for Approval
+              <MessageSquare className="ml-1 sm:ml-2 w-3 sm:w-4 h-5 sm:h-5 transform group-hover:scale-110 transition-transform duration-300" />
+            </button>
             <button
               onClick={handleApprove}
               disabled={
