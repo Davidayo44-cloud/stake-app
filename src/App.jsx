@@ -13,10 +13,11 @@ import { AdminLayout } from "./AdminLayout";
 import { AdminHome } from "./adminPages/Home";
 import { ManagePool } from "./adminPages/ManagePool";
 import { ContractControls } from "./adminPages/ContractControls";
-// import BuyCrypto from "./userPages/BuyCrypto";
+import BuyCrypto from "./userPages/BuyCrypto";
 // import TransactionStatus from "./components/TransactionStatus"; // New component
 import NotFound from "./pages/NotFound";
 import SendUSDTInstructions from "./userPages/SendUSDTInstructions";
+import TransactionManagement from "./adminPages/TransactionManagement";
 
 // Validate environment variables
 const requiredEnvVars = {
@@ -121,14 +122,14 @@ export default function App() {
             <Route path="staking" element={<Staking />} />
             <Route path="referrals" element={<Referrals />} />
             <Route path="rewards" element={<Rewards />} />
-            {/* <Route path="buy" element={<BuyCrypto />} /> */}
+            <Route path="buy" element={<BuyCrypto />} />
             <Route path="instruction" element={<SendUSDTInstructions />} />
-            
           </Route>
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminHome />} />
             <Route path="manage-pool" element={<ManagePool />} />
             <Route path="controls" element={<ContractControls />} />
+            <Route path="transactions" element={<TransactionManagement/>} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

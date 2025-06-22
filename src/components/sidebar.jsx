@@ -9,6 +9,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Info,
+  CreditCard,
 } from "lucide-react";
 
 export default function Sidebar({
@@ -23,6 +24,7 @@ export default function Sidebar({
     { href: "/dashboard/rewards", label: "Rewards", icon: Gift },
     { href: "/dashboard/referrals", label: "Referrals", icon: Users },
     { href: "/dashboard/instruction", label: "SendUSDT", icon: Info },
+    { href: "/dashboard/buy", label: "BuyUSDT", icon: CreditCard },
   ];
 
   const handleToggleCollapse = () => {

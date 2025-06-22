@@ -863,28 +863,28 @@ export function AdminHome() {
   ]);
 
   // Admin access check
-  if (
-    account?.address &&
-    adminAddress &&
-    account.address.toLowerCase() !== adminAddress.toLowerCase()
-  ) {
-    console.log("AdminHome.jsx: Access denied", {
-      connectedAddress: account.address,
-      adminAddress,
-    });
-    return (
-      <div className="flex items-center justify-center h-screen bg-slate-900 text-slate-200">
-        <div className="text-center">
-          <h2 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6 font-geist">
-            Access Denied
-          </h2>
-          <p className="text-sm sm:text-base">
-            Only the admin address ({adminAddress}) can access this dashboard.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  // if (
+  //   account?.address &&
+  //   adminAddress &&
+  //   account.address.toLowerCase() !== adminAddress.toLowerCase()
+  // ) {
+  //   console.log("AdminHome.jsx: Access denied", {
+  //     connectedAddress: account.address,
+  //     adminAddress,
+  //   });
+  //   return (
+  //     <div className="flex items-center justify-center h-screen bg-slate-900 text-slate-200">
+  //       <div className="text-center">
+  //         <h2 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6 font-geist">
+  //           Access Denied
+  //         </h2>
+  //         <p className="text-sm sm:text-base">
+  //           Only the admin address ({adminAddress}) can access this dashboard.
+  //         </p>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   // Admin actions
   const togglePause = async () => {

@@ -7,6 +7,7 @@ import {
   Settings,
   ArrowLeft,
   ArrowRight,
+  History
 } from "lucide-react";
 
 export function AdminSidebar({
@@ -19,6 +20,7 @@ export function AdminSidebar({
     { href: "/admin", label: "Overview", icon: Shield, exact: true },
     { href: "/admin/manage-pool", label: "Manage Pool", icon: DollarSign },
     { href: "/admin/controls", label: "Controls", icon: Settings },
+    { href: "/admin/transactions", label: "Transactions", icon: History },
   ];
 
   const handleToggleCollapse = () => {
