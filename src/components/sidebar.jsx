@@ -63,7 +63,7 @@ export default function Sidebar({
             <X size={24} />
           </button>
         </div>
-        <nav className="space-y-2 flex-1 mt-16">
+        <nav className="space-y-2 flex-1 mt-8">
           {links.map((link) => (
             <NavLink
               key={link.href}
@@ -94,7 +94,7 @@ export default function Sidebar({
         <div
           className={`flex items-center ${
             isCollapsed ? "justify-center" : "justify-between"
-          } p-6 mb-8`}
+          } p-6 mb-2`}
         >
           <h2
             className={`text-xl font-bold text-cyan-600 font-geist ${

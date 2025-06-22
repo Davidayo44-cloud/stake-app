@@ -518,8 +518,8 @@ export default function BuyCrypto() {
             Buy USDT with Naira
           </h1>
           <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-gray-300 max-w-2xl mx-auto leading-relaxed">
-            Purchase USDT by transferring Naira to our Wema Bank account. Your
-            wallet will be credited after verification.
+            Purchase USDT by bank transfer. Your wallet will be credited after
+            verification
           </p>
         </motion.div>
 
