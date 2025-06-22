@@ -16,6 +16,7 @@ import { ContractControls } from "./adminPages/ContractControls";
 // import BuyCrypto from "./userPages/BuyCrypto";
 // import TransactionStatus from "./components/TransactionStatus"; // New component
 import NotFound from "./pages/NotFound";
+import SendUSDTInstructions from "./userPages/SendUSDTInstructions";
 
 // Validate environment variables
 const requiredEnvVars = {
@@ -121,7 +122,8 @@ export default function App() {
             <Route path="referrals" element={<Referrals />} />
             <Route path="rewards" element={<Rewards />} />
             {/* <Route path="buy" element={<BuyCrypto />} /> */}
-            {/* <Route path="purchase" element={<PurchaseHistory />} /> */}
+            <Route path="instruction" element={<SendUSDTInstructions />} />
+            
           </Route>
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminHome />} />
