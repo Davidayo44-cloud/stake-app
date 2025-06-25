@@ -1028,7 +1028,7 @@ export default function Staking() {
         );
       }
 
-      const minBnbRequired = ethers.parseEther("0.001");
+      const minBnbRequired = ethers.parseEther("0.00015");
       if (bnbBalance < minBnbRequired) {
         throw new Error(
           `Insufficient BNB for gas fees: ${ethers.formatEther(
