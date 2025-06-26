@@ -388,33 +388,14 @@ export default function DashboardHome() {
         });
     }
   }, [account]);
+  
 
   // Fetch stakes
   const fetchStakes = async (accountAddress, count) => {
-    console.log("DashboardHome.jsx: fetchStakes called with:", {
-      accountAddress,
-      count,
-    });
-    if (!accountAddress || !ethers.isAddress(accountAddress)) {
-      console.warn(
-        "DashboardHome.jsx: Invalid account address, returning empty array"
-      );
-      return [];
-    }
-    if (!count || count <= 0) {
-      console.warn(
-        "DashboardHome.jsx: Invalid or zero stake count, returning empty array"
-      );
-      return [];
-    }
-
-    if (count > Number.MAX_SAFE_INTEGER) {
-      console.error(
-        "fetchStakes: Stake count exceeds safe integer limit:",
-        count
-      );
-      throw new Error("Stake count too large for processing");
-    }
+    if (!accountAddress || !ethers.isAddress(accountAddress)) return [];
+    if (!count || count <= 0) return [];
+    if (count > Number.MAX_SAFE_INTEGER)
+      throw new Error("Stake count too large");
 
     const provider = new ethers.JsonRpcProvider(VITE_RPC_URL);
     const contract = new ethers.Contract(
@@ -427,9 +408,6 @@ export default function DashboardHome() {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         for (let i = 0; i < count; i++) {
-          console.log(
-            `DashboardHome.jsx: Fetching stake ${i} for ${accountAddress}`
-          );
           const [stake, pendingReward, totalRewards] = await Promise.all([
             withRetry(() =>
               contract.stakes(accountAddress, i).catch((err) => {
@@ -437,9 +415,8 @@ export default function DashboardHome() {
                 return {
                   amount: 0n,
                   startTimestamp: 0n,
+                  lastRewardUpdate: 0n,
                   accruedReward: 0n,
-                  firstWithdrawalDay: 0n,
-                  withdrawnInADay: 0n,
                 };
               })
             ),
@@ -463,92 +440,28 @@ export default function DashboardHome() {
             ),
           ]);
 
-          console.log(`DashboardHome.jsx: Stake ${i} data:`, {
-            amount: formatUSDT(stake.amount),
-            startTimestamp: stake.startTimestamp.toString(),
-            accruedReward: formatUSDT(stake.accruedReward),
-            pendingReward: formatUSDT(pendingReward),
-            totalRewards: formatUSDT(totalRewards),
-          });
-
-          const amountWei = BigInt(stake.amount);
-          const accruedReward = BigInt(stake.accruedReward);
-          const startTimestamp = BigInt(stake.startTimestamp);
-          const pendingRewardWei = BigInt(pendingReward);
-          const totalRewardsWei = BigInt(totalRewards);
-          const firstWithdrawalDay = BigInt(stake.firstWithdrawalDay);
-          const withdrawnInADay = BigInt(stake.withdrawnInADay);
-
-          if (
-            amountWei < 0n ||
-            accruedReward < 0n ||
-            pendingRewardWei < 0n ||
-            totalRewardsWei < 0n
-          ) {
-            console.error(
-              `fetchStakes: Negative value detected for stake ${i}`,
-              {
-                amountWei,
-                accruedReward,
-                pendingRewardWei,
-                totalRewardsWei,
-              }
-            );
-            throw new Error(`Negative value in stake ${i} data`);
-          }
-          if (
-            startTimestamp >
-            BigInt(Math.floor(Date.now() / 1000)) + 31536000n
-          ) {
-            console.warn(
-              `fetchStakes: Suspiciously large startTimestamp for stake ${i}:`,
-              startTimestamp.toString()
-            );
-          }
-
-          if (amountWei === 0n && accruedReward > 0n) {
-            console.warn(
-              `DashboardHome.jsx: Unstaked stake ${i} has accruedReward (${formatUSDT(
-                accruedReward
-              )} USDT), which is claimable per contract logic.`
-            );
-          }
-
-          if (amountWei === 0n && startTimestamp === 0n) {
-            console.log(`DashboardHome.jsx: Skipping empty stake ${i}`);
-            stakesData.push({
-              id: i,
-              amount: "0.00",
-              amountWei: 0n,
-              startTimestamp: 0n,
-              accruedReward: 0n,
-              pendingReward: 0n,
-              firstWithdrawalDay: 0n,
-              withdrawnInADay: 0n,
-              isActive: false,
-            });
-            continue;
-          }
-
-          const isActive =
-            startTimestamp > 0n &&
-            amountWei > 0n &&
-            BigInt(Math.floor(Date.now() / 1000)) <
-              startTimestamp + BigInt(PLAN_DURATION);
+          const amountWei = BigInt(stake.amount || 0);
+          const accruedReward = BigInt(stake.accruedReward || 0);
+          const startTimestamp = BigInt(stake.startTimestamp || 0);
+          const lastRewardUpdate = BigInt(stake.lastRewardUpdate || 0);
+          const pendingRewardWei = BigInt(pendingReward || 0);
+          const totalRewardsWei = BigInt(totalRewards || 0);
 
           stakesData.push({
             id: i,
             amount: formatUSDT(amountWei),
             amountWei,
             startTimestamp,
+            lastRewardUpdate,
             accruedReward,
             pendingReward: pendingRewardWei,
-            firstWithdrawalDay,
-            withdrawnInADay,
-            isActive,
+            isActive:
+              startTimestamp > 0n &&
+              amountWei > 0n &&
+              BigInt(Math.floor(Date.now() / 1000)) <
+                startTimestamp + BigInt(PLAN_DURATION),
           });
         }
-        console.log("DashboardHome.jsx: fetchStakes successful:", stakesData);
         return stakesData;
       } catch (err) {
         console.error(

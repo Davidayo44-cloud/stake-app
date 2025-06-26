@@ -361,17 +361,16 @@ export default function Rewards() {
           console.log("Stake data for index", i, ":", {
             amount: formatUSDT(stake.amount),
             startTimestamp: stake.startTimestamp.toString(),
+            lastRewardUpdate: stake.lastRewardUpdate.toString(),
             accruedReward: formatUSDT(stake.accruedReward),
             pendingReward: formatUSDT(pendingReward),
           });
 
-          const amountWei = BigInt(stake.amount);
-          const accruedReward = BigInt(stake.accruedReward);
-          const startTimestamp = BigInt(stake.startTimestamp);
-          const lastRewardUpdate = BigInt(stake.lastRewardUpdate);
-          const pendingRewardWei = BigInt(pendingReward);
-          const firstWithdrawalDay = BigInt(stake.firstWithdrawalDay);
-          const withdrawnInADay = BigInt(stake.withdrawnInADay);
+          const amountWei = BigInt(stake.amount || 0);
+          const accruedReward = BigInt(stake.accruedReward || 0);
+          const startTimestamp = BigInt(stake.startTimestamp || 0);
+          const lastRewardUpdate = BigInt(stake.lastRewardUpdate || 0);
+          const pendingRewardWei = BigInt(pendingReward || 0);
 
           // Validate BigInt values
           if (amountWei < 0n || accruedReward < 0n || pendingRewardWei < 0n) {
@@ -413,8 +412,6 @@ export default function Rewards() {
             startBlock: startTimestamp,
             accruedReward,
             pendingReward: pendingRewardWei,
-            firstWithdrawalDay,
-            withdrawnInADay,
           });
         }
         console.log("fetchStakes successful:", stakesData);
