@@ -77,6 +77,8 @@ export default function BuyCrypto() {
   const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
   const [isPaidConfirmModalOpen, setIsPaidConfirmModalOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
+  const [isCancelConfirmModalOpen, setIsCancelConfirmModalOpen] =
+    useState(false);
   const [lastVerifiedTransaction, setLastVerifiedTransaction] = useState(null); // Track last verified transaction
 
   // Set modal app element
@@ -420,6 +422,70 @@ export default function BuyCrypto() {
     }
   };
 
+  const handleCancelClick = () => {
+    setIsCancelConfirmModalOpen(true);
+  };
+
+  const confirmCancel = async () => {
+    if (!transactionId) {
+      toast.error("No transaction found");
+      setIsCancelConfirmModalOpen(false);
+      return;
+    }
+
+    setIsLoading(true);
+    const toastId = toast.loading("Cancelling transaction...");
+    try {
+      const response = await fetch(
+        `${VITE_API_BASE_URL}/api/cancel-transaction`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transactionId }),
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to cancel transaction");
+      }
+
+      toast.success("Transaction cancelled successfully.", {
+        id: toastId,
+      });
+      setShowBankDetails(false);
+      setTransactionId("");
+      setPendingTransaction(null);
+      sessionStorage.removeItem("pendingTransactionId");
+      setFormData({ name: "", usdtAmount: "" });
+      setIsCancelConfirmModalOpen(false);
+      if (account?.address) {
+        const txResponse = await fetch(
+          `${VITE_API_BASE_URL}/api/transactions`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              useraddress: account.address,
+            },
+          }
+        );
+        if (txResponse.ok) {
+          const data = await txResponse.json();
+          setTransactions(
+            data.map((tx) => ({
+              ...tx,
+              status:
+                tx.status === "awaiting verification" ? "awaiting" : tx.status,
+            }))
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Transaction cancellation error:", error);
+      toast.error(`Error: ${error.message}`, { id: toastId });
+    } finally {
+      setIsLoading(false);
+    }
+  };
   // Reset form
   const resetForm = () => {
     setShowBankDetails(false);
@@ -667,12 +733,26 @@ export default function BuyCrypto() {
                     }`}
                   />
                 </button>
-                <button
+                {/* <button
                   onClick={handleNewPurchase}
                   className="group flex-1 flex items-center justify-center px-4 py-2 sm:px-6 sm:py-3 bg-gradient-to-r from-gray-600 to-gray-700 text-white rounded-xl hover:from-gray-500 hover:to-gray-600 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-gray-500/25 text-sm sm:text-base"
                 >
                   New Purchase
                   <ArrowRight className="ml-2 w-4 h-4 sm:w-5 sm:h-5 transform group-hover:translate-x-1 transition-transform duration-300" />
+                </button> */}
+                <button
+                  onClick={handleCancelClick}
+                  disabled={
+                    isLoading || pendingTransaction?.status === "awaiting"
+                  }
+                  className={`group flex-1 flex items-center justify-center px-4 py-2 sm:px-6 sm:py-3 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-xl hover:from-red-500 hover:to-red-600 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-red-500/25 text-sm sm:text-base ${
+                    isLoading || pendingTransaction?.status === "awaiting"
+                      ? "opacity-50 cursor-not-allowed"
+                      : ""
+                  }`}
+                >
+                  Cancel Transaction
+                  <X className="ml-2 w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
               </div>
             </div>
@@ -894,6 +974,56 @@ export default function BuyCrypto() {
             >
               Cancel
               <X className="ml-2 w-4 h-4" />
+            </button>
+          </div>
+        </motion.div>
+      </ReactModal>
+      <ReactModal
+        isOpen={isCancelConfirmModalOpen}
+        onRequestClose={() => setIsCancelConfirmModalOpen(false)}
+        className="bg-gray-900 p-4 sm:p-6 rounded-2xl border border-cyan-700/30 max-w-[90vw] sm:max-w-md w-full mx-auto my-4 max-h-[80vh] overflow-y-auto"
+        overlayClassName="fixed inset-0 bg-black/70 flex items-center justify-center z-50"
+        shouldCloseOnOverlayClick={true}
+        shouldCloseOnEsc={true}
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          transition={{ duration: 0.3 }}
+        >
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg sm:text-xl font-bold text-slate-200 font-geist">
+              Confirm Cancellation
+            </h3>
+            <button
+              onClick={() => setIsCancelConfirmModalOpen(false)}
+              className="text-slate-400 hover:text-cyan-600"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <p className="text-sm sm:text-base text-slate-200 font-geist-mono mb-4">
+            Are you sure you want to cancel this transaction? This action cannot
+            be undone.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+            <button
+              onClick={confirmCancel}
+              disabled={isLoading}
+              className={`group flex-1 flex items-center justify-center px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-xl hover:from-red-500 hover:to-red-600 transition-all duration-300 text-sm ${
+                isLoading ? "opacity-50 cursor-not-allowed" : ""
+              }`}
+            >
+              Yes, Cancel
+              <X className="ml-2 w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setIsCancelConfirmModalOpen(false)}
+              className="group flex-1 flex items-center justify-center px-4 py-2 bg-gradient-to-r from-gray-600 to-gray-700 text-white rounded-xl hover:from-gray-500 hover:to-gray-600 transition-all duration-300 text-sm"
+            >
+              No, Keep Transaction
+              <ArrowRight className="ml-2 w-4 h-4" />
             </button>
           </div>
         </motion.div>
