@@ -1371,10 +1371,9 @@ export default function Rewards() {
   }
 
   if (isLoading) {
-    console.log("Rendering loading state");
     return (
-      <div className="flex items-center justify-center bg-slate-900 p-4 w-full min-w-0">
-        <div className="animate-spin rounded-full h-12 sm:h-16 w-12 sm:w-16 border-t-4 border-cyan-600"></div>
+      <div className="flex items-center justify-center bg-slate-900 p-4 w-full min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 sm:h-10 sm:w-10 border-t-4 border-cyan-600"></div>
       </div>
     );
   }

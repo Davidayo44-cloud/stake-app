@@ -742,9 +742,9 @@ export default function DashboardHome() {
 
   if (isLoading || isStakeCountLoading || isReferralBonusLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-slate-900">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-cyan-600"></div>
-      </div>
+      <div className="flex items-center justify-center bg-slate-900 p-4 w-full min-h-screen">
+      <div className="animate-spin rounded-full h-8 w-8 sm:h-10 sm:w-10 border-t-4 border-cyan-600"></div>
+    </div>
     );
   }
 
