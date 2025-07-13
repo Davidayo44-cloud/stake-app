@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion, useScroll, useTransform } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
+import CarouselSection from "../components/CarouselSection";
+import StatsSection from "../components/StatsSection";
 import {
   Globe,
   Star,
@@ -10,12 +12,19 @@ import {
   ShieldCheck,
   DollarSign,
   Users,
+  TrendingUp,
+  Lock,
+  Zap,
+  HelpCircle,
+  ChevronDown,
 } from "lucide-react";
 import CountUp from "react-countup";
 import { ConnectButton, useActiveAccount } from "thirdweb/react";
 import { createThirdwebClient } from "thirdweb";
 import { inAppWallet, createWallet } from "thirdweb/wallets";
 import Header from "../components/Header";
+import FeaturesSection from "../components/FeaturesSection";
+import FAQSection from "../components/FAQSection";
 
 // Validate environment variables
 const VITE_THIRDWEB_CLIENT_ID = import.meta.env.VITE_THIRDWEB_CLIENT_ID;
@@ -29,9 +38,9 @@ if (!VITE_THIRDWEB_CLIENT_ID) {
 
 // Mock data for stats
 const mockData = {
-  platformUptime: 99.9, // 99.9% reliability
-  userSatisfaction: 4.8, // 4.8/5 star rating
-  globalReach: 50, // Available in 50+ countries
+  platformUptime: 99.9,
+  userSatisfaction: 4.8,
+  globalReach: 50,
 };
 
 // Initialize Thirdweb client
@@ -62,438 +71,163 @@ const wallets = [
   createWallet("io.zerion.wallet"),
 ];
 
+const FloatingParticles = () => (
+  <div className="absolute inset-0 overflow-hidden pointer-events-none">
+    {[...Array(60)].map((_, i) => (
+      <motion.div
+        key={i}
+        className="absolute w-1 h-1 bg-cyan-400/30 rounded-full"
+        initial={{
+          x: Math.random() * window.innerWidth,
+          y: Math.random() * window.innerHeight,
+        }}
+        animate={{
+          x: Math.random() * window.innerWidth,
+          y: Math.random() * window.innerHeight,
+        }}
+        transition={{
+          duration: Math.random() * 20 + 10,
+          repeat: Infinity,
+          repeatType: "reverse",
+        }}
+      />
+    ))}
+  </div>
+);
+
 export default function Home() {
   const [mounted, setMounted] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const account = useActiveAccount();
   const navigate = useNavigate();
+  const { scrollYProgress } = useScroll();
+  const y = useTransform(scrollYProgress, [0, 1], ["0%", "50%"]);
+  const [openFAQIndex, setOpenFAQIndex] = useState(null);
 
   useEffect(() => {
-    setMounted(true);
-   
+    setTimeout(() => {
+      setMounted(true);
+      setIsLoading(false);
+    }, 500); // Simulate loading for better UX
   }, [account, navigate]);
 
-  if (!mounted) return null;
+  const toggleFAQ = (index) => {
+    setOpenFAQIndex(openFAQIndex === index ? null : index);
+  };
+
+  if (!mounted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+          className="w-12 h-12 border-4 border-t-cyan-500 border-slate-700 rounded-full"
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-200 font-geist">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 font-geist overflow-hidden">
       <Header />
 
       {/* Hero Section */}
-      <section className="relative py-8 sm:py-8 bg-gradient-to-b from-cyan-700/10 to-transparent overflow-hidden">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22 viewBox=%220 0 40 40%22%3E%3Ccircle cx=%2220%22 cy=%2220%22 r=%222%22 fill=%22rgba(14,116,144,0.2)%22/%3E%3C/svg%3E')] opacity-30" />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <motion.div
-            initial={{ rotate: 0 }}
-            animate={{ rotate: 360 }}
-            transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-            className="opacity-20"
-          >
-            <img
-              src="/images/hero.png"
-              alt="Ethereum Earth Logo"
-              width={500}
-              height={500}
-              sizes="(max-width: 768px) 250px, 500px"
-              className="object-contain"
-            />
+      <section className="relative min-h-screen flex items-center justify-center">
+        <div className="absolute inset-0">
+          <div className="absolute inset-0 bg-gradient-to-r from-slate-900/60 to-slate-800/40" />
+          <motion.div style={{ y }} className="absolute inset-0 opacity-25">
+            <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-500/15 rounded-full blur-3xl" />
+            <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-blue-500/15 rounded-full blur-3xl" />
           </motion.div>
         </div>
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-            {/* Left: Image */}
+        <FloatingParticles/>
+
+        <div className="relative z-10 mx-auto max-w-7xl px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="flex justify-center md:justify-end"
+              initial={{ opacity: 0, x: -50 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.8, ease: "easeOut" }}
+              className="space-y-8"
             >
-              <img
-                src="/images/im.png"
-                alt="StakePro Feature Image"
-                width={600}
-                height={600}
-                sizes="(max-width: 768px) 150px, 300px"
-                className="object-contain"
-              />
-            </motion.div>
-            {/* Right: Content */}
-            <motion.div
-              initial={{ opacity: 0, y: 50, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.6 }}
-              className="relative bg-slate-800/20 backdrop-blur-sm p-8 sm:p-12 rounded-3xl border border-cyan-700/30 shadow-inner hover:shadow-[0_0_20px_rgba(14,116,144,0.3)] transition-all duration-300"
-            >
+              <div className="space-y-4">
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.2 }}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800/70 backdrop-blur-md rounded-full border border-slate-600/50 shadow-sm"
+                >
+                  <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+                  <span className="text-sm font-medium text-slate-200">
+                    Now Live
+                  </span>
+                </motion.div>
+
+                <motion.h1
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.8, delay: 0.3 }}
+                  className="text-5xl lg:text-7xl font-bold leading-tight tracking-tight"
+                >
+                  <span className="text-white">Stake</span>{" "}
+                  <span className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+                    USDT
+                  </span>
+                  <br />
+                  <span className="text-slate-200 text-4xl lg:text-5xl">
+                    Earn 30% Returns
+                  </span>
+                </motion.h1>
+              </div>
+
               <motion.p
-                initial={{ opacity: 0, y: 50 }}
+                initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6 }}
-                className="text-base sm:text-lg font-semibold text-cyan-600 mb-4 font-geist-mono"
+                transition={{ duration: 0.6, delay: 0.5 }}
+                className="text-xl text-slate-300 leading-relaxed max-w-2xl"
               >
-                Grow Your Wealth Securely
+                Professional-grade staking platform with institutional security. Lock
+                your USDT for 5 days and earn guaranteed returns.
               </motion.p>
-              <style>
-                {`
-                  @keyframes gradientShift {
-                    0% { background-position: 0% 50%; }
-                    50% { background-position: 100% 50%; }
-                    100% { background-position: 0% 50%; }
-                  }
-                  .headline:hover {
-                    text-shadow: 0 0 10px rgba(14, 116, 144, 0.5);
-                  }
-                `}
-              </style>
-              <motion.h1
-                id="hero-headline"
-                initial={{ opacity: 0, y: 50, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: 0.6, delay: 0.3 }}
-                style={{
-                  fontSize: "2.25rem",
-                  fontWeight: 800,
-                  marginBottom: "1.5rem",
-                  background: "linear-gradient(to right, #06b6d4, #0891b2)",
-                  backgroundClip: "text",
-                  WebkitBackgroundClip: "text",
-                  color: "transparent",
-                  fontFamily: "Geist, sans-serif",
-                  backgroundSize: "200% auto",
-                  backgroundPosition: "0% 50%",
-                  animation: "gradientShift 5s ease infinite",
-                  transition: "all 0.3s ease",
-                }}
-                className="headline md:text-5xl"
-                aria-label="Stake USDT to earn 13% rewards"
-              >
-                Stake USDT, Earn 20% Rewards!
-              </motion.h1>
-              <motion.p
-                initial={{ opacity: 0, y: 50 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.4 }}
-                className="text-lg sm:text-xl mb-8 max-w-lg sm:max-w-xl mx-auto font-medium font-geist text-slate-300"
-              >
-                Lock your USDT for 5 days and grow your wealth with our secure
-                staking platform and referral program.
-              </motion.p>
+
               <motion.div
-                initial={{ opacity: 0, y: 50 }}
+                initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.6 }}
-                className="relative"
+                transition={{ duration: 0.6, delay: 0.7 }}
+                className="flex flex-col sm:flex-row gap-4"
               >
                 {account ? (
-                  <motion.div
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    <Link
-                      to="/dashboard"
-                      className="inline-flex items-center px-4 py-2 bg-slate-800 text-cyan-600 border border-cyan-600 rounded-md font-medium text-sm transition-all duration-300 hover:bg-slate-700"
-                      aria-label="Navigate to staking dashboard"
-                    >
-                      View Dashboard
-                      <ArrowRight className="ml-2 w-4 h-4 transform group-hover:translate-x-1 transition-transform duration-300" />
-                    </Link>
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    <ConnectButton
-                      client={client}
-                      wallets={wallets}
-                      connectButton={{
-                        label: (
-                          <span className="group flex items-center text-cyan-600 text-sm font-medium transition-colors duration-300">
-                            Get Started
-                            <ArrowRight className="ml-2 w-4 h-4 transform group-hover:translate-x-1 transition-transform duration-300" />
-                          </span>
-                        ),
-                        style: {
-                          background: "#1e293b", // bg-slate-800
-                          color: "#06b6d4", // text-cyan-600
-                          border: "1px solid #06b6d4", // border-cyan-600
-                          padding: "0.5rem 1rem",
-                          borderRadius: "0.375rem",
-                          transition: "all 0.3s ease",
-                        },
-                        className:
-                          "bg-slate-800 text-cyan-600 border border-cyan-600 px-4 py-2 rounded-md font-medium text-sm transition-all duration-300 hover:bg-slate-700 flex items-center justify-center",
-                      }}
-                      connectModal={{
-                        size: "compact",
-                        title: "Connect to StakePro",
-                        showThirdwebBranding: false,
-                      }}
-                      theme="dark"
-                    />
-                  </motion.div>
-                )}
-              </motion.div>
-              <motion.div
-                initial={{ opacity: 0, y: 50 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.8 }}
-                className="flex justify-center items-center gap-2 mt-6 text-base sm:text-lg text-slate-400 font-geist"
-              >
-                <ShieldCheck
-                  className="w-5 h-5 text-cyan-600"
-                  aria-hidden="true"
-                />
-                <span>Powered by Binance</span>
-              </motion.div>
-              <div id="hero-description" className="sr-only">
-                Connect your wallet to stake USDT and earn 20% rewards on our
-                secure platform.
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* Stats Section */}
-      <section className="relative py-16 sm:py-20 bg-gradient-to-b from-cyan-700/10 to-transparent">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22 viewBox=%220 0 40 40%22%3E%3Ccircle cx=%2220%22 cy=%2220%22 r=%222%22 fill=%22rgba(14,116,144,0.2)%22/%3E%3C/svg%3E')] opacity-30" />
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <motion.h2
-            initial={{ opacity: 0, y: 50, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.6 }}
-            className="text-2xl md:text-3xl font-extrabold text-center mb-12 text-slate-200 font-geist hover:text-shadow-[0_0_10px_rgba(14,116,144,0.5)] transition-all duration-300"
-            id="stats-heading"
-          >
-            Platform Stats
-          </motion.h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 lg:gap-12">
-            {[
-              {
-                icon: Shield,
-                label: "Platform Uptime",
-                value: mockData.platformUptime,
-                suffix: "% Reliability",
-              },
-              {
-                icon: Star,
-                label: "User Satisfaction",
-                value: mockData.userSatisfaction,
-                suffix: "/5 Star Rating",
-              },
-              {
-                icon: Globe,
-                label: "Global Reach",
-                value: mockData.globalReach,
-                suffix: "+ Countries",
-              },
-            ].map((stat, index) => (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, y: 50, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: 0.6, delay: index * 0.2 }}
-                className="relative bg-slate-800/40 backdrop-blur-sm p-8 sm:p-10 rounded-2xl border border-cyan-700/30 shadow-inner transition-all duration-300 hover:scale-105 hover:shadow-[0_0_20px_rgba(14,116,144,0.3)] group"
-                aria-labelledby="stats-heading"
-              >
-                <stat.icon
-                  className="w-10 h-10 sm:w-12 sm:h-12 text-cyan-600 mb-4 animate-pulse"
-                  aria-hidden="true"
-                />
-                <h3 className="text-lg sm:text-xl font-bold text-cyan-600 font-geist">
-                  {stat.label}
-                </h3>
-                <p className="text-3xl sm:text-4xl font-bold text-slate-200 font-geist-mono mt-2">
-                  <CountUp
-                    end={stat.value}
-                    decimals={
-                      stat.suffix.includes("Rating")
-                        ? 1
-                        : stat.suffix.includes("Reliability")
-                        ? 1
-                        : 0
-                    }
-                    duration={2.5}
-                    separator=","
-                    suffix={stat.suffix}
-                  />
-                </p>
-                <span className="absolute top-2 right-2 text-xs text-slate-400 font-geist opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  Live
-                </span>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section className="relative py-16 sm:py-20 bg-gradient-to-b from-cyan-700/10 to-transparent overflow-hidden">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22 viewBox=%220 0 40 40%22%3E%3Ccircle cx=%2220%22 cy=%2220%22 r=%222%22 fill=%22rgba(14,116,144,0.2)%22/%3E%3C/svg%3E')] opacity-30" />
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <motion.p
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="text-base sm:text-lg font-semibold text-cyan-600 mb-4 text-center font-geist-mono"
-          >
-            Built for Wealth Creation
-          </motion.p>
-          <motion.h2
-            initial={{ opacity: 0, y: 50, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            className="text-2xl md:text-3xl font-extrabold text-center mb-12 text-slate-200 font-geist hover:text-shadow-[0_0_10px_rgba(14,116,144,0.5)] transition-all duration-300"
-            id="features-heading"
-          >
-            Why Choose StakePro?
-          </motion.h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 lg:gap-12">
-            {[
-              {
-                icon: DollarSign,
-                title: "High Rewards",
-                description:
-                  "Earn 20% rewards by staking USDT for just 5 days.",
-                tooltip: "13% APY",
-              },
-              {
-                icon: Users,
-                title: "Referral Program",
-                description: "Invite friends and earn 0.5 USDT per referral.",
-                tooltip: "0.5 USDT per referral",
-              },
-              {
-                icon: Shield,
-                title: "Secure Platform",
-                description:
-                  "Your assets are protected with top-tier security.",
-                tooltip: "Audited by SecureDeFi",
-              },
-            ].map((feature, index) => (
-              <motion.div
-                key={feature.title}
-                initial={{ opacity: 0, y: 50, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: 0.6, delay: index * 0.2 + 0.4 }}
-                className="relative bg-slate-800/40 backdrop-blur-sm p-6 sm:p-8 rounded-2xl border border-cyan-700/30 shadow-inner transition-all duration-300 hover:scale-105 hover:shadow-[0_0_20px_rgba(14,116,144,0.3)] group"
-                style={{ transformStyle: "preserve-3d" }}
-                aria-labelledby="features-heading"
-              >
-                <feature.icon
-                  className="w-8 h-8 sm:w-10 sm:h-10 text-cyan-600 mb-4 animate-pulse"
-                  aria-hidden="true"
-                />
-                <h3 className="text-lg sm:text-xl font-semibold mb-2 text-slate-200 font-geist">
-                  {feature.title}
-                </h3>
-                <motion.p
-                  initial={{ y: 10, opacity: 0.8 }}
-                  whileHover={{ y: 0, opacity: 1 }}
-                  transition={{ duration: 0.3 }}
-                  className="text-base sm:text-lg text-slate-400 font-geist"
-                >
-                  {feature.description}
-                </motion.p>
-                <span className="absolute bottom-2 right-2 text-xs text-slate-400 font-geist opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  {feature.tooltip}
-                </span>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="relative py-16 sm:py-20 bg-gradient-to-b from-cyan-700/10 to-transparent overflow-hidden">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22 viewBox=%220 0 40 40%22%3E%3Ccircle cx=%2220%22 cy=%2220%22 r=%222%22 fill=%22rgba(14,116,144,0.2)%22/%3E%3C/svg%3E')] opacity-30" />
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.6 }}
-            className="relative bg-slate-800/40 backdrop-blur-sm p-8 sm:p-12 rounded-3xl border border-cyan-700/30 shadow-inner hover:shadow-[0_0_20px_rgba(14,116,144,0.3)] transition-all duration-300 group"
-            style={{ transformStyle: "preserve-3d" }}
-          >
-            <div
-              className="absolute inset-0 bg-gradient-to-r from-cyan-700/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 animate-pulse"
-              style={{ zIndex: -1 }}
-            />
-            <ArrowRightCircle
-              className="w-12 h-12 sm:w-16 sm:h-16 text-cyan-600 mx-auto mb-6"
-              aria-hidden="true"
-            />
-            <motion.p
-              initial={{ opacity: 0, y: 50 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="text-base sm:text-lg font-semibold text-cyan-600 mb-4 font-geist-mono"
-            >
-              Earn 20% APY in just 5 days
-            </motion.p>
-            <motion.h2
-              initial={{ opacity: 0, y: 50, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.6, delay: 0.4 }}
-              className="text-2xl md:text-3xl font-extrabold mb-6 text-slate-200 font-geist hover:text-shadow-[0_0_10px_rgba(14,116,144,0.5)] transition-all duration-300"
-            >
-              Start Staking Today
-            </motion.h2>
-            <motion.p
-              initial={{ opacity: 0, y: 50 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.6 }}
-              className="text-lg sm:text-xl mb-8 max-w-lg sm:max-w-xl mx-auto font-medium font-geist text-slate-300"
-            >
-              Join thousands of users growing their wealth with StakePro’s
-              secure platform.
-            </motion.p>
-            <motion.div
-              initial={{ opacity: 0, y: 50 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.8 }}
-              className="flex flex-col sm:flex-row justify-center gap-4 sm:gap-6"
-            >
-              {account ? (
-                <motion.div
-                  whileTap={{ scale: 0.95 }}
-                  className="relative z-10"
-                >
                   <Link
                     to="/dashboard"
-                    className="inline-flex items-center px-4 py-3 bg-slate-800 text-cyan-600 border border-cyan-600 rounded-md font-medium text-sm transition-all duration-300 hover:bg-slate-700 touch-manipulation"
-                    aria-label="Navigate to staking dashboard"
-                    aria-describedby="cta-description"
+                    className="group inline-flex items-center justify-center px-8 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold rounded-xl transition-all duration-300 hover:from-cyan-600 hover:to-blue-700 hover:shadow-lg hover:shadow-cyan-500/30 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-900"
                   >
-                    Go to Dashboard
-                    <ArrowRight className="ml-2 w-4 h-4 transform group-hover:translate-x-1 transition-transform duration-300" />
+                    View Dashboard
+                    <ArrowRight className="ml-2 w-5 h-5 transition-transform group-hover:translate-x-1" />
                   </Link>
-                </motion.div>
-              ) : (
-                <motion.div
-                  whileTap={{ scale: 0.95 }}
-                  className="relative z-10"
-                >
+                ) : (
                   <ConnectButton
                     client={client}
                     wallets={wallets}
                     connectButton={{
                       label: (
-                        <span className="group flex items-center text-cyan-600 text-sm font-medium transition-colors duration-300">
+                        <span className="group flex items-center text-white font-semibold">
                           Get Started
-                          <ArrowRight className="ml-2 w-4 h-4 transform group-hover:translate-x-1 transition-transform duration-300" />
+                          <ArrowRight className="ml-2 w-5 h-5 transition-transform group-hover:translate-x-1" />
                         </span>
                       ),
                       style: {
-                        background: "#1e293b",
-                        color: "#06b6d4",
-                        border: "1px solid #06b6d4",
-                        padding: "0.75rem 1.5rem",
-                        borderRadius: "0.375rem",
+                        background:
+                          "linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)",
+                        color: "white",
+                        border: "none",
+                        padding: "1rem 2rem",
+                        borderRadius: "0.75rem",
+                        fontWeight: "600",
                         transition: "all 0.3s ease",
-                        touchAction: "manipulation",
+                        boxShadow: "0 4px 14px 0 rgba(6, 182, 212, 0.2)",
                       },
                       className:
-                        "bg-slate-800 text-cyan-600 border border-cyan-600 px-4 py-3 rounded-md font-medium text-sm transition-all duration-300 hover:bg-slate-700 flex items-center justify-center touch-manipulation",
+                        "hover:shadow-lg hover:shadow-cyan-500/30 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-900",
                     }}
                     connectModal={{
                       size: "compact",
@@ -502,53 +236,540 @@ export default function Home() {
                     }}
                     theme="dark"
                   />
-                </motion.div>
-              )}
-              <motion.div whileTap={{ scale: 0.95 }} className="relative z-10">
+                )}
+
                 <a
                   href="https://t.me/stakerpro2"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center px-4 py-3 bg-slate-800 text-cyan-600 border border-cyan-600 rounded-md font-medium text-sm transition-all duration-300 hover:bg-slate-700 touch-manipulation"
-                  aria-label="Learn more about StakePro"
-                  aria-describedby="cta-description"
+                  className="group inline-flex items-center justify-center px-8 py-4 bg-slate-800/70 backdrop-blur-md text-slate-200 font-semibold rounded-xl border border-slate-600/50 transition-all duration-300 hover:bg-slate-700/70 hover:text-white hover:border-slate-500 hover:shadow-lg hover:shadow-cyan-500/20 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-900"
                 >
                   Learn More
-                  <ArrowRight className="ml-2 w-4 h-4 transform group-hover:translate-x-1 transition-transform duration-300" />
+                  <ArrowRight className="ml-2 w-5 h-5 transition-transform group-hover:translate-x-1" />
                 </a>
               </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.9 }}
+                className="flex items-center gap-3 pt-4"
+              >
+                <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                <span className="text-sm text-slate-300">
+                  Secured by Binance Smart Chain
+                </span>
+              </motion.div>
             </motion.div>
+
             <motion.div
-              initial={{ opacity: 0, y: 50 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 1.0 }}
-              className="flex justify-center items-center gap-2 mt-8 text-base sm:text-lg text-slate-400 font-geist"
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.8, delay: 0.4 }}
+              className="relative flex justify-center"
             >
-              <ShieldCheck
-                className="w-5 h-5 text-cyan-600"
-                aria-hidden="true"
-              />
-              <span>Trusted by thousands of users | Audited by SecureDeFi</span>
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 rounded-3xl blur-xl" />
+                <div className="relative z-10 p-8">
+                  <img
+                    src="/images/immm.png"
+                    alt="StakePro Feature"
+                    className="w-full max-w-md object-contain"
+                    loading="lazy"
+                  />
+                </div>
+              </div>
             </motion.div>
-            <div id="cta-description" className="sr-only">
-              Start staking USDT to earn 13% rewards or learn more about
-              StakePro’s secure platform.
+          </div>
+        </div>
+      </section>
+
+        <CarouselSection/>
+
+      {/* Stats Section */}
+      {/* <section className="relative py-24 bg-slate-900/60 overflow-hidden">
+        <div className="absolute inset-0 opacity-30">
+          <div className="absolute top-10 left-10 w-32 h-32 bg-cyan-500/10 rounded-full blur-xl animate-pulse" />
+          <div className="absolute bottom-10 right-10 w-40 h-40 bg-blue-500/10 rounded-full blur-xl animate-pulse" style={{ animationDelay: '1s' }} />
+          <div className="absolute top-1/2 left-1/2 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl animate-pulse" style={{ animationDelay: '2s' }} />
+        </div>
+
+        <div className="mx-auto max-w-7xl px-6 lg:px-8 relative z-10">
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            viewport={{ once: true }}
+            className="text-center mb-20"
+          >
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800/70 backdrop-blur-md rounded-full border border-slate-600/50 mb-6">
+              <TrendingUp className="w-4 h-4 text-cyan-400" />
+              <span className="text-sm font-medium text-slate-200">
+                Live Performance
+              </span>
+            </div>
+            <h2 className="text-4xl lg:text-5xl font-bold text-white mb-6">
+              Platform Performance
+            </h2>
+            <p className="text-xl text-slate-300 max-w-2xl mx-auto">
+              Real-time metrics showcasing our platform's reliability and user
+              satisfaction
+            </p>
+          </motion.div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {[
+              {
+                icon: Shield,
+                label: "Platform Uptime",
+                value: mockData.platformUptime,
+                suffix: "%",
+                description: "Service Reliability",
+                color: "emerald",
+                trend: "+0.2%",
+              },
+              {
+                icon: Star,
+                label: "User Rating",
+                value: mockData.userSatisfaction,
+                suffix: "/5",
+                description: "Customer Satisfaction",
+                color: "amber",
+                trend: "+0.1",
+              },
+              {
+                icon: Globe,
+                label: "Global Reach",
+                value: mockData.globalReach,
+                suffix: "+",
+                description: "Countries Supported",
+                color: "blue",
+                trend: "+5",
+              },
+            ].map((stat, index) => (
+              <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, y: 50 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: index * 0.2 }}
+                viewport={{ once: true }}
+                className="group relative"
+                style={{ transformStyle: "preserve-3d" }}
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/50 via-blue-500/50 to-purple-500/50 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-sm" />
+                <motion.div
+                  className="relative p-8 bg-slate-800/40 backdrop-blur-xl rounded-3xl border border-slate-600/30 group-hover:border-cyan-500/50 transition-all duration-500 hover:shadow-2xl hover:shadow-cyan-500/20"
+                  whileHover={{
+                    rotateX: 5,
+                    rotateY: 5,
+                    scale: 1.02,
+                    transition: { duration: 0.3 }
+                  }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent rounded-3xl" />
+                  <div className="relative flex items-center justify-between mb-8">
+                    <div className="relative">
+                      <div className={`absolute inset-0 bg-${stat.color}-500/20 rounded-xl blur-md group-hover:blur-lg transition-all duration-300`} />
+                      <div className={`relative p-3 bg-${stat.color}-500/10 rounded-xl group-hover:bg-${stat.color}-500/20 transition-colors duration-300`}>
+                        <stat.icon className={`w-6 h-6 text-${stat.color}-400 group-hover:scale-110 transition-transform duration-300`} />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 px-3 py-1 bg-emerald-500/10 rounded-full">
+                      <TrendingUp className="w-3 h-3 text-emerald-400" />
+                      <span className="text-xs font-medium text-emerald-400">{stat.trend}</span>
+                    </div>
+                  </div>
+                  <div className="relative mb-6">
+                    <svg className="w-20 h-20 mx-auto transform -rotate-90" viewBox="0 0 100 100">
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="45"
+                        stroke="currentColor"
+                        strokeWidth="8"
+                        fill="none"
+                        className="text-slate-700"
+                      />
+                      <motion.circle
+                        cx="50"
+                        cy="50"
+                        r="45"
+                        stroke="currentColor"
+                        strokeWidth="8"
+                        fill="none"
+                        className={`text-${stat.color}-400`}
+                        strokeLinecap="round"
+                        initial={{ pathLength: 0 }}
+                        whileInView={{ pathLength: stat.value / 100 }}
+                        transition={{ duration: 2, delay: index * 0.3 }}
+                        viewport={{ once: true }}
+                        style={{
+                          strokeDasharray: "283",
+                          strokeDashoffset: "283",
+                        }}
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-white">
+                          <CountUp
+                            end={stat.value}
+                            decimals={
+                              stat.suffix.includes("/5")
+                                ? 1
+                                : stat.suffix.includes("%")
+                                ? 1
+                                : 0
+                            }
+                            duration={2.5}
+                            separator=","
+                          />
+                        </div>
+                        <div className="text-xs text-slate-400">{stat.suffix}</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-3 text-center">
+                    <h3 className="text-lg font-semibold text-white group-hover:text-cyan-100 transition-colors duration-300">
+                      {stat.label}
+                    </h3>
+                    <p className="text-sm text-slate-400 group-hover:text-slate-300 transition-colors duration-300">
+                      {stat.description}
+                    </p>
+                  </div>
+                  <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-0 h-0.5 bg-gradient-to-r from-cyan-500 to-blue-500 group-hover:w-16 transition-all duration-500" />
+                </motion.div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section> */}
+<StatsSection/>
+      {/* Features Section */}
+      {/* <section className="relative py-24">
+        <div className="mx-auto max-w-7xl px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800/70 backdrop-blur-md rounded-full border border-slate-600/50 mb-6">
+              <TrendingUp className="w-4 h-4 text-cyan-400" />
+              <span className="text-sm font-medium text-slate-200">
+                Advanced Features
+              </span>
+            </div>
+            <h2 className="text-3xl lg:text-4xl font-bold text-white mb-6">
+              Why StakePro Stands Out
+            </h2>
+            <p className="text-xl text-slate-300 max-w-3xl mx-auto">
+              Institutional-grade features designed for serious investors seeking
+              consistent returns
+            </p>
+          </motion.div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {[
+              {
+                icon: DollarSign,
+                title: "High Yield Returns",
+                description:
+                  "Earn 20% APY on your USDT holdings with our optimized staking protocol",
+                highlight: "20% APY",
+              },
+              {
+                icon: Users,
+                title: "Referral Rewards",
+                description:
+                  "Build your network and earn 0.5 USDT for each successful referral",
+                highlight: "0.5 USDT",
+              },
+              {
+                icon: Lock,
+                title: "Secure Custody",
+                description:
+                  "Multi-signature wallets and cold storage for maximum asset protection",
+                highlight: "Bank-grade",
+              },
+              {
+                icon: Zap,
+                title: "Instant Liquidity",
+                description:
+                  "Quick 5-day lock periods with automated reward distribution",
+                highlight: "5 days",
+              },
+              {
+                icon: Shield,
+                title: "Audited Protocol",
+                description:
+                  "Smart contracts audited by leading security firms for your peace of mind",
+                highlight: "Audited",
+              },
+              {
+                icon: TrendingUp,
+                title: "Compound Growth",
+                description:
+                  "Reinvest your earnings automatically to maximize long-term returns",
+                highlight: "Auto-compound",
+              },
+            ].map((feature, index) => (
+              <motion.div
+                key={feature.title}
+                initial={{ opacity: 0, y: 50 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: index * 0.1 }}
+                viewport={{ once: true }}
+                className="group relative p-8 bg-slate-800/20 backdrop-blur-lg rounded-2xl border border-slate-600/30 hover:border-cyan-500/50 transition-all duration-500 hover:shadow-xl hover:shadow-cyan-500/10"
+                style={{ transformStyle: "preserve-3d" }}
+                whileHover={{ rotateX: 2, rotateY: 2 }}
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-blue-500/5 rounded-2xl" />
+                <div className="relative flex items-center justify-between mb-6">
+                  <feature.icon className="w-8 h-8 text-cyan-400 group-hover:scale-110 transition-transform duration-300" />
+                  <span className="text-xs font-medium text-emerald-400 bg-emerald-400/20 px-3 py-1 rounded-full group-hover:bg-emerald-400/30 transition-colors duration-300">
+                    {feature.highlight}
+                  </span>
+                </div>
+                <h3 className="text-xl font-semibold text-white mb-3">
+                  {feature.title}
+                </h3>
+                <p className="text-slate-300 leading-relaxed">
+                  {feature.description}
+                </p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section> */}
+
+      <FeaturesSection/>
+
+  
+
+      {/* FAQ Section */}
+   {/* FAQ Section */}
+   
+      {/* <section className="relative py-24 bg-gradient-to-b from-slate-950/70 to-slate-900/70">
+        <div className="absolute inset-0 bg-[url('/images/noise.png')] opacity-5" />
+        <div className="absolute inset-0 opacity-30">
+          <div className="absolute top-10 left-10 w-32 h-32 bg-cyan-500/10 rounded-full blur-xl animate-pulse" />
+          <div className="absolute bottom-10 right-10 w-40 h-40 bg-blue-500/10 rounded-full blur-xl animate-pulse" style={{ animationDelay: "1s" }} />
+        </div>
+
+        <div className="mx-auto max-w-7xl px-6 lg:px-8 relative z-10">
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800/70 backdrop-blur-md rounded-full border border-slate-600/50 mb-6">
+              <HelpCircle className="w-4 h-4 text-cyan-400" />
+              <span className="text-sm font-medium text-slate-200">
+                Got Questions?
+              </span>
+            </div>
+            <h2 className="text-3xl lg:text-4xl font-bold text-white mb-6">
+              Frequently Asked Questions
+            </h2>
+            <p className="text-xl text-slate-300 max-w-3xl mx-auto">
+              Everything you need to know about staking with StakePro
+            </p>
+          </motion.div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {[
+              {
+                question: "What is the minimum amount to stake?",
+                answer: "The minimum stake is 5 USDT, ensuring accessibility for all investors.",
+              },
+              {
+                question: "How long is the staking period?",
+                answer: "The staking period is 5 days, after which you can withdraw your principal and rewards or auto-restake.",
+              },
+              {
+                question: "What is the reward rate for staking?",
+                answer: "You earn a 20% APY on your staked USDT, providing high-yield returns.",
+              },
+              {
+                question: "What is the referral bonus?",
+                answer: "Earn 0.5 USDT for each successful referral when they stake with us.",
+              },
+              {
+                question: "Can I withdraw my rewards early?",
+                answer: "Yes, but early withdrawal halves your accrued rewards to maintain pool stability.",
+              },
+              {
+                question: "How secure is the platform?",
+                answer: "Our platform uses multi-signature wallets, cold storage, and audited smart contracts for maximum security.",
+              },
+            ].map((faq, index) => (
+              <motion.div
+                key={faq.question}
+                initial={{ opacity: 0, y: 50 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: index * 0.1 }}
+                viewport={{ once: true }}
+                className="group relative"
+              >
+                <div
+                  className="relative p-6 bg-slate-800/30 backdrop-blur-xl rounded-3xl border border-slate-600/20 hover:border-cyan-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/10 hover:bg-slate-800/40"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-blue-500/5 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <div className="relative">
+                    <button
+                      onClick={() => toggleFAQ(index)}
+                      className="flex items-center justify-between w-full text-left focus:outline-none"
+                      aria-expanded={openFAQIndex === index}
+                    >
+                      <div className="flex items-center gap-3">
+                        <HelpCircle className="w-5 h-5 text-cyan-400 flex-shrink-0" />
+                        <h3 className="text-lg font-semibold text-white">
+                          {faq.question}
+                        </h3>
+                      </div>
+                      <ChevronDown
+                        className={`w-5 h-5 text-slate-400 transition-transform duration-300 flex-shrink-0 ${
+                          openFAQIndex === index ? "rotate-180 text-cyan-400" : ""
+                        }`}
+                      />
+                    </button>
+                    <motion.div
+                      initial={false}
+                      animate={{
+                        height: openFAQIndex === index ? "auto" : 0,
+                        opacity: openFAQIndex === index ? 1 : 0,
+                      }}
+                      transition={{ duration: 0.3, ease: "easeInOut" }}
+                      className="overflow-hidden"
+                    >
+                      <div className="pt-4 pb-2">
+                        <p className="text-slate-300 leading-relaxed pl-8">
+                          {faq.answer}
+                        </p>
+                      </div>
+                    </motion.div>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section> */}
+      <FAQSection/>
+
+      {/* CTA Section */}
+      <section className="relative py-24 bg-gradient-to-r from-slate-950/70 to-slate-900/70">
+        <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 to-blue-500/10" />
+        <div className="relative mx-auto max-w-4xl px-6 lg:px-8 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            viewport={{ once: true }}
+            className="space-y-8"
+          >
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800/70 backdrop-blur-md rounded-full border border-slate-600/50">
+              <ArrowRightCircle className="w-5 h-5 text-cyan-400" />
+              <span className="text-sm font-medium text-slate-200">
+                Ready to Start?
+              </span>
+            </div>
+
+            <h2 className="text-4xl lg:text-5xl font-bold text-white leading-tight">
+              Start Earning Today
+            </h2>
+
+            <p className="text-xl text-slate-300 max-w-2xl mx-auto leading-relaxed">
+              Join thousands of smart investors who trust StakePro for consistent,
+              secure returns on their digital assets.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-4 justify-center pt-8">
+              {account ? (
+                <Link
+                  to="/dashboard"
+                  className="group inline-flex items-center justify-center px-10 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold rounded-xl transition-all duration-300 hover:from-cyan-600 hover:to-blue-700 hover:shadow-lg hover:shadow-cyan-500/30 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+                >
+                  Go to Dashboard
+                  <ArrowRight className="ml-2 w-5 h-5 transition-transform group-hover:translate-x-1" />
+                </Link>
+              ) : (
+                <ConnectButton
+                  client={client}
+                  wallets={wallets}
+                  connectButton={{
+                    label: (
+                      <span className="group flex items-center text-white font-semibold">
+                        Get Started Now
+                        <ArrowRight className="ml-2 w-5 h-5 transition-transform group-hover:translate-x-1" />
+                      </span>
+                    ),
+                    style: {
+                      background:
+                        "linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)",
+                      color: "white",
+                      border: "none",
+                      padding: "1rem 2.5rem",
+                      borderRadius: "0.75rem",
+                      fontWeight: "600",
+                      transition: "all 0.3s ease",
+                      boxShadow: "0 4px 14px 0 rgba(6, 182, 212, 0.2)",
+                    },
+                    className:
+                      "hover:shadow-lg hover:shadow-cyan-500/30 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-900",
+                  }}
+                  connectModal={{
+                    size: "compact",
+                    title: "Connect to StakePro",
+                    showThirdwebBranding: false,
+                  }}
+                  theme="dark"
+                />
+              )}
+
+              <a
+                href="https://t.me/stakerpro2"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group inline-flex items-center justify-center px-10 py-4 bg-slate-800/70 backdrop-blur-md text-slate-200 font-semibold rounded-xl border border-slate-600/50 transition-all duration-300 hover:bg-slate-700/70 hover:text-white hover:border-slate-500 hover:shadow-lg hover:shadow-cyan-500/20 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+              >
+                Learn More
+                <ArrowRight className="ml-2 w-5 h-5 transition-transform group-hover:translate-x-1" />
+              </a>
+            </div>
+
+            <div className="flex items-center justify-center gap-6 pt-8 text-sm text-slate-400">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <span>SecureDeFi Audited</span>
+              </div>
+              <div className="w-1 h-1 bg-slate-600 rounded-full" />
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-cyan-400" />
+                <span>10,000+ Active Users</span>
+              </div>
+              <div className="w-1 h-1 bg-slate-600 rounded-full" />
+              <div className="flex items-center gap-2">
+                <Globe className="w-4 h-4 text-blue-400" />
+                <span>Global Access</span>
+              </div>
             </div>
           </motion.div>
         </div>
       </section>
+
       {/* Footer */}
-      <footer className="relative py-16 sm:py-20 bg-gradient-to-b from-cyan-700/10 to-transparent">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22 viewBox=%220 0 40 40%22%3E%3Ccircle cx=%2220%22 cy=%2220%22 r=%222%22 fill=%22rgba(14,116,144,0.2)%22/%3E%3C/svg%3E')] opacity-30" />
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-          <motion.p
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="text-base sm:text-lg text-slate-400 font-geist"
-          >
-            © {new Date().getFullYear()} StakePro. All rights reserved.
-          </motion.p>
+      <footer className="relative py-12 bg-slate-950/60">
+        <div className="mx-auto max-w-7xl px-6 lg:px-8">
+          <div className="text-center">
+            <p className="text-slate-400">
+              © {new Date().getFullYear()} StakePro. All rights reserved.
+            </p>
+          </div>
         </div>
       </footer>
     </div>
