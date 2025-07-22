@@ -1030,9 +1030,9 @@ const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
         >
           <button
             onClick={() => setShowHistory(!showHistory)}
-            className="flex items-center text-cyan-400 hover:text-cyan-300 transition-colors"
+            className="flex items-center text-cyan-400 hover:text-cyan-300 transition-colors text-sm"
           >
-            <History className="w-5 h-5 mr-2" />
+            <History className="w-4 h-4 mr-2" />
             {showHistory ? "Hide History" : "Show History"}
           </button>
           <AnimatePresence>
@@ -1044,7 +1044,7 @@ const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
                 transition={{ duration: 0.5 }}
                 className="mt-4 bg-slate-800/50 backdrop-blur-md p-6 rounded-xl border border-cyan-500/20 shadow-lg"
               >
-                <h3 className="text-xl font-bold text-cyan-400 mb-4">
+                <h3 className="text-lg font-bold text-white mb-4">
                   Withdrawal History
                 </h3>
                 {withdrawals.length === 0 ? (
@@ -1287,7 +1287,7 @@ const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
         <ReactModal
           isOpen={isDetailsModalOpen}
           onRequestClose={() => setIsDetailsModalOpen(false)}
-          className="bg-slate-800 p-6 rounded-xl max-w-md mx-auto my-12 border border-cyan-500/20 shadow-xl z-[60]"
+          className="bg-slate-800 p-4 sm:p-6 rounded-xl w-full max-w-[90vw] sm:max-w-md mx-auto my-4 sm:my-12 border border-cyan-500/20 shadow-xl z-[60]"
           overlayClassName="fixed inset-0 bg-black/60 flex items-center justify-center transition-opacity duration-300 z-[50]"
           shouldCloseOnOverlayClick={true}
           shouldCloseOnEsc={true}
@@ -1298,14 +1298,14 @@ const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.3 }}
           >
-            <h3 className="text-sm font-bold text-white mb-4">
+            <h3 className="text-base sm:text-lg font-bold text-white mb-4">
               Withdrawal Details
             </h3>
             {selectedWithdrawal && (
-              <div className="text-sm text-slate-300 space-y-2">
-                <div className="flex items-center">
+              <div className="text-xs sm:text-sm text-slate-300 space-y-2">
+                <div className="flex items-center flex-wrap">
                   <span className="font-semibold mr-2">Transaction ID:</span>
-                  <span className="truncate max-w-xs">
+                  <span className="truncate max-w-[70%] sm:max-w-xs">
                     {selectedWithdrawal._id}
                   </span>
                   <button
@@ -1315,15 +1315,15 @@ const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
                     className="ml-2 text-cyan-400 hover:text-cyan-300"
                   >
                     {copySuccess.transactionId ? (
-                      <CheckCircle className="w-4 h-4" />
+                      <CheckCircle className="w-3 sm:w-4 h-3 sm:h-4" />
                     ) : (
-                      <Copy className="w-4 h-4" />
+                      <Copy className="w-3 sm:w-4 h-3 sm:h-4" />
                     )}
                   </button>
                 </div>
-                <div className="flex items-center">
+                <div className="flex items-center flex-wrap">
                   <span className="font-semibold mr-2">Transaction Hash:</span>
-                  <span className="truncate max-w-xs">
+                  <span className="truncate max-w-[70%] sm:max-w-xs">
                     {selectedWithdrawal.txHash || "N/A"}
                   </span>
                   {selectedWithdrawal.txHash && (
@@ -1334,9 +1334,9 @@ const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
                       className="ml-2 text-cyan-400 hover:text-cyan-300"
                     >
                       {copySuccess.txHash ? (
-                        <CheckCircle className="w-4 h-4" />
+                        <CheckCircle className="w-3 sm:w-4 h-3 sm:h-4" />
                       ) : (
-                        <Copy className="w-4 h-4" />
+                        <Copy className="w-3 sm:w-4 h-3 sm:h-4" />
                       )}
                     </button>
                   )}
@@ -1369,7 +1369,7 @@ const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
                 <div>
                   <span className="font-semibold">Status:</span>{" "}
                   <span
-                    className={`inline-block px-3 py-1 rounded-full text-xs font-medium text-white ${getStatusColor(
+                    className={`inline-block px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-xs font-medium text-white ${getStatusColor(
                       selectedWithdrawal.status
                     )}`}
                   >
@@ -1384,7 +1384,7 @@ const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
             )}
             <button
               onClick={() => setIsDetailsModalOpen(false)}
-              className="w-full mt-6 px-4 py-2 bg-slate-700 text-cyan-400 rounded-lg hover:bg-slate-600 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full mt-4 sm:mt-6 px-4 py-2 bg-slate-700 text-cyan-400 rounded-lg hover:bg-slate-600 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
               disabled={isLoading}
             >
               Close
