@@ -89,6 +89,9 @@ if (minStake <= 0n) {
   throw new Error("Invalid minimum stake");
 }
 
+// Add at the top with other environment variables
+const USDT_RATE = parseInt(import.meta.env.VITE_USDT_RATE, 10) || 1600;
+
 // Validate minimum referral withdrawal
 const minReferralWithdrawal = BigInt(VITE_MIN_REFERRAL_WITHDRAWAL);
 if (minReferralWithdrawal <= 0n) {
@@ -1571,12 +1574,22 @@ export default function Staking() {
         <h3 className="text-base sm:text-lg md:text-xl font-bold text-slate-200 mb-2 sm:mb-4 font-geist">
           Wallet Info
         </h3>
-        <p className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-white font-geist">
-          Balance: {usdtBalance} USDT
-        </p>
-        <p className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-white font-geist">
-          Allowance: {usdtAllowance} USDT
-        </p>
+        <div>
+          <p className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-white font-geist">
+            Balance: {usdtBalance} USDT
+          </p>
+          <p className="text-slate-400 text-xs sm:text-sm font-geist-mono">
+            {(Number(usdtBalance) * USDT_RATE).toFixed(2)} NGN
+          </p>
+        </div>
+        <div>
+          <p className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-white font-geist">
+            Allowance: {usdtAllowance} USDT
+          </p>
+          <p className="text-slate-400 text-xs sm:text-sm font-geist-mono">
+            {(Number(usdtAllowance) * USDT_RATE).toFixed(2)} NGN
+          </p>
+        </div>
       </motion.div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 md:gap-6 mb-4 sm:mb-6 md:mb-8 w-full">
@@ -1609,7 +1622,6 @@ export default function Staking() {
                   Please enter a valid amount
                 </p>
               )}
-         
             </div>
             <button
               onClick={handleContactAdmin}
@@ -1737,9 +1749,14 @@ export default function Staking() {
         <h3 className="text-base sm:text-lg md:text-xl font-bold text-slate-200 mb-2 sm:mb-4 font-geist">
           Referral Bonus
         </h3>
-        <p className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-white font-geist">
-          {formatUSDT(referralBonus)} USDT
-        </p>
+        <div>
+          <p className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-white font-geist">
+            {formatUSDT(referralBonus)} USDT
+          </p>
+          <p className="text-slate-400 text-xs sm:text-sm font-geist-mono">
+            {(Number(formatUSDT(referralBonus)) * USDT_RATE).toFixed(2)} NGN
+          </p>
+        </div>
         <p className="text-slate-400 text-xs sm:text-sm font-geist-mono mb-2 sm:mb-4">
           Minimum {ethers.formatUnits(minReferralWithdrawal, usdtDecimals)} USDT
           to withdraw

@@ -1,15 +1,16 @@
 import { NavLink, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-  X,
+  ArrowDownRight, // For BuyUSDT
+  ArrowUpRight, // For WithdrawUSDT
+  Send, // For SendUSDT
   Home,
   DollarSign,
   Gift,
   Users,
   ArrowLeft,
   ArrowRight,
-  Info,
-  CreditCard,
+  X,
 } from "lucide-react";
 
 export default function Sidebar({
@@ -23,8 +24,9 @@ export default function Sidebar({
     { href: "/dashboard/staking", label: "Staking", icon: DollarSign },
     { href: "/dashboard/rewards", label: "Rewards", icon: Gift },
     { href: "/dashboard/referrals", label: "Referrals", icon: Users },
-    { href: "/dashboard/instruction", label: "SendUSDT", icon: Info },
-    { href: "/dashboard/buy", label: "BuyUSDT", icon: CreditCard },
+    { href: "/dashboard/instruction", label: "SendUSDT", icon: Send },
+    { href: "/dashboard/buy", label: "BuyUSDT", icon: ArrowDownRight },
+    { href: "/dashboard/withdraw", label: "WithdrawUSDT", icon: ArrowUpRight },
   ];
 
   const handleToggleCollapse = () => {

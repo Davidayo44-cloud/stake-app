@@ -1485,7 +1485,7 @@ export default function Rewards() {
             </div>
           </div>
           <p className="text-xs sm:text-sm text-slate-400 font-geist-mono">
-            Active Stakes:{" "}
+             Stakes:{" "}
             {stakes.filter((stake) => stake.amountWei > 0n).length}
           </p>
         </motion.div>

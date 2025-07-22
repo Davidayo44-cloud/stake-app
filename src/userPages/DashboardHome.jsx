@@ -9,6 +9,7 @@ import {
   Gift,
   Copy,
   X,
+  RefreshCw,
 } from "lucide-react";
 import { Line, Pie } from "react-chartjs-2";
 import {
@@ -48,13 +49,14 @@ ChartJS.register(
 // Environment variables
 const USDT_DECIMALS = parseInt(import.meta.env.VITE_USDT_DECIMALS, 10) || 18;
 const PLAN_REWARD_RATE =
-  parseInt(import.meta.env.VITE_PLAN_REWARD_RATE, 10) || 20; // Default to 20%
+  parseInt(import.meta.env.VITE_PLAN_REWARD_RATE, 10) || 30; // Default to 20%
 const DAY_IN_SECONDS = 86400;
 const PLAN_DURATION = 5 * DAY_IN_SECONDS; // 5 days in seconds
 const REFERRAL_WITHDRAW_THRESHOLD = BigInt(
   import.meta.env.VITE_MIN_REFERRAL_WITHDRAWAL || 5 * 10 ** USDT_DECIMALS
 ); // 5 USDT in wei
-
+// Add at the top with other environment variables
+const USDT_RATE = parseInt(import.meta.env.VITE_USDT_RATE, 10) || 1600;
 // Validate environment variables
 const requiredEnvVars = {
   VITE_THIRDWEB_CLIENT_ID: import.meta.env.VITE_THIRDWEB_CLIENT_ID,
@@ -271,6 +273,54 @@ const getStakeStatus = (stake) => {
   return { label: "Completed", color: "bg-green-600" };
 };
 
+// Cache utilities
+const CACHE_KEY = "dashboard_data";
+const CACHE_DURATION = 60 * 1000; // 60 seconds
+
+const getCachedData = () => {
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (!cached) return null;
+    const { data, timestamp } = JSON.parse(cached);
+    if (Date.now() - timestamp > CACHE_DURATION) return null;
+    return {
+      stakes: data.stakes.map((stake) => ({
+        ...stake,
+        amountWei: BigInt(stake.amountWei),
+        pendingReward: BigInt(stake.pendingReward),
+        accruedReward: BigInt(stake.accruedReward),
+        startTimestamp: BigInt(stake.startTimestamp),
+        lastRewardUpdate: BigInt(stake.lastRewardUpdate),
+      })),
+      referrals: data.referrals,
+    };
+  } catch (err) {
+    console.error("getCachedData error:", err);
+    return null;
+  }
+};
+
+const setCachedData = (data) => {
+  try {
+    const serializedData = {
+      stakes: data.stakes.map((stake) => ({
+        ...stake,
+        amountWei: stake.amountWei.toString(),
+        pendingReward: stake.pendingReward.toString(),
+        accruedReward: stake.accruedReward.toString(),
+        startTimestamp: stake.startTimestamp.toString(),
+        lastRewardUpdate: stake.lastRewardUpdate.toString(),
+      })),
+      referrals: data.referrals,
+    };
+    localStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify({ data: serializedData, timestamp: Date.now() })
+    );
+  } catch (err) {
+    console.error("setCachedData error:", err);
+  }
+};
 // Card animation variants
 const cardVariants = {
   initial: { opacity: 0, y: 20 },
@@ -336,6 +386,7 @@ export default function DashboardHome() {
     isSuspended: false,
     reason: null,
   });
+  const [showRefreshBanner, setShowRefreshBanner] = useState(true);
 
   // Contract data hooks
   const {
@@ -351,7 +402,6 @@ export default function DashboardHome() {
       enabled: !!account && ethers.isAddress(account?.address),
       retry: 3,
       retryDelay: 1000,
-      refetchInterval: 10000,
     },
   });
 
@@ -368,7 +418,6 @@ export default function DashboardHome() {
       enabled: !!account && ethers.isAddress(account?.address),
       retry: 3,
       retryDelay: 1000,
-      refetchInterval: 10000,
     },
   });
 
@@ -388,7 +437,6 @@ export default function DashboardHome() {
         });
     }
   }, [account]);
-  
 
   // Fetch stakes
   const fetchStakes = async (accountAddress, count) => {
@@ -405,10 +453,11 @@ export default function DashboardHome() {
     );
     const stakesData = [];
 
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        for (let i = 0; i < count; i++) {
-          const [stake, pendingReward, totalRewards] = await Promise.all([
+    try {
+      const stakePromises = [];
+      for (let i = 0; i < count; i++) {
+        stakePromises.push(
+          Promise.all([
             withRetry(() =>
               contract.stakes(accountAddress, i).catch((err) => {
                 console.error(`fetchStakes: Error fetching stake ${i}:`, err);
@@ -438,48 +487,40 @@ export default function DashboardHome() {
                 return 0n;
               })
             ),
-          ]);
-
-          const amountWei = BigInt(stake.amount || 0);
-          const accruedReward = BigInt(stake.accruedReward || 0);
-          const startTimestamp = BigInt(stake.startTimestamp || 0);
-          const lastRewardUpdate = BigInt(stake.lastRewardUpdate || 0);
-          const pendingRewardWei = BigInt(pendingReward || 0);
-          const totalRewardsWei = BigInt(totalRewards || 0);
-
-          stakesData.push({
-            id: i,
-            amount: formatUSDT(amountWei),
-            amountWei,
-            startTimestamp,
-            lastRewardUpdate,
-            accruedReward,
-            pendingReward: pendingRewardWei,
-            isActive:
-              startTimestamp > 0n &&
-              amountWei > 0n &&
-              BigInt(Math.floor(Date.now() / 1000)) <
-                startTimestamp + BigInt(PLAN_DURATION),
-          });
-        }
-        return stakesData;
-      } catch (err) {
-        console.error(
-          "fetchStakes error on attempt",
-          attempt,
-          ":",
-          err.message
+          ])
         );
-        if (attempt === 3) {
-          console.error(
-            `DashboardHome.jsx: fetchStakes failed after 3 attempts at ${VITE_RPC_URL}:`,
-            err
-          );
-          toast.error(`Failed to fetch stakes: ${err.message}`);
-          return [];
-        }
-        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
+
+      const results = await Promise.all(stakePromises);
+      results.forEach(([stake, pendingReward, totalRewards], i) => {
+        const amountWei = BigInt(stake.amount || 0);
+        const accruedReward = BigInt(stake.accruedReward || 0);
+        const startTimestamp = BigInt(stake.startTimestamp || 0);
+        const lastRewardUpdate = BigInt(stake.lastRewardUpdate || 0);
+        const pendingRewardWei = BigInt(pendingReward || 0);
+        const totalRewardsWei = BigInt(totalRewards || 0);
+
+        stakesData.push({
+          id: i,
+          amount: formatUSDT(amountWei),
+          amountWei,
+          startTimestamp,
+          lastRewardUpdate,
+          accruedReward,
+          pendingReward: pendingRewardWei,
+          isActive:
+            startTimestamp > 0n &&
+            amountWei > 0n &&
+            BigInt(Math.floor(Date.now() / 1000)) <
+              startTimestamp + BigInt(PLAN_DURATION),
+        });
+      });
+
+      return stakesData;
+    } catch (err) {
+      console.error("fetchStakes error:", err.message);
+      toast.error(`Failed to fetch stakes: ${err.message}`);
+      return [];
     }
   };
 
@@ -493,6 +534,12 @@ export default function DashboardHome() {
         "DashboardHome.jsx: Invalid account address, returning empty array"
       );
       return [];
+    }
+
+    const cachedReferrals = getCachedData()?.referrals;
+    if (cachedReferrals) {
+      console.log("DashboardHome.jsx: Using cached referrals");
+      return cachedReferrals;
     }
 
     const provider = new ethers.JsonRpcProvider(VITE_RPC_URL);
@@ -527,6 +574,72 @@ export default function DashboardHome() {
       console.error("fetchReferrals error:", err.message);
       toast.error(`Failed to fetch referrals: ${err.message}`);
       return [];
+    }
+  };
+
+  // Refresh data
+  const refreshData = async () => {
+    if (
+      !account?.address ||
+      !ethers.isAddress(account.address) ||
+      stakeCountData === undefined ||
+      isStakeCountLoading
+    ) {
+      console.log("DashboardHome.jsx: Skipping refresh - conditions not met", {
+        address: account?.address,
+        isValidAddress: ethers.isAddress(account?.address),
+        stakeCountData,
+        isStakeCountLoading,
+      });
+      setStakes([]);
+      setReferrals([]);
+      setTotalPendingRewards(0n);
+      setTotalAccruedRewards(0n);
+      setIsLoading(false);
+      setShowRefreshBanner(true);
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await refetchStakeCount();
+      await refetchReferralBonus();
+      const countBigInt = BigInt(stakeCountData);
+      if (countBigInt > BigInt(Number.MAX_SAFE_INTEGER)) {
+        console.error(
+          "refreshData: Stake count exceeds safe integer limit:",
+          countBigInt.toString()
+        );
+        throw new Error("Stake count too large for processing");
+      }
+      const stakesData = await fetchStakes(
+        account.address,
+        Number(countBigInt)
+      );
+      const referralsData = await fetchReferrals(account.address);
+      const totalPendingRewards = stakesData.reduce(
+        (sum, stake) => sum + stake.pendingReward,
+        0n
+      );
+      const totalAccruedRewards = stakesData.reduce(
+        (sum, stake) => sum + stake.accruedReward,
+        0n
+      );
+      setStakes(stakesData);
+      setReferrals(referralsData);
+      setTotalPendingRewards(totalPendingRewards);
+      setTotalAccruedRewards(totalAccruedRewards);
+      setCachedData({ stakes: stakesData, referrals: referralsData });
+      setShowRefreshBanner(false);
+    } catch (err) {
+      console.error("DashboardHome.jsx: Failed to refresh data:", err);
+      toast.error(`Failed to fetch dashboard data: ${err.message}`);
+      setStakes([]);
+      setReferrals([]);
+      setTotalPendingRewards(0n);
+      setTotalAccruedRewards(0n);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -570,85 +683,39 @@ export default function DashboardHome() {
         setError(referralBonusError);
       }
 
-      const updateData = async () => {
-        if (
-          account?.address &&
-          ethers.isAddress(account.address) &&
-          stakeCountData !== undefined &&
-          !isStakeCountLoading
-        ) {
-          console.log("DashboardHome.jsx: Fetching stakes and referrals", {
-            address: account.address,
-            stakeCount: stakeCountData.toString(),
-          });
-          try {
-            await refetchStakeCount();
-            const countBigInt = BigInt(stakeCountData);
-            if (countBigInt > BigInt(Number.MAX_SAFE_INTEGER)) {
-              console.error(
-                "updateData: Stake count exceeds safe integer limit:",
-                countBigInt.toString()
-              );
-              throw new Error("Stake count too large for processing");
-            }
-            const stakesData = await fetchStakes(
-              account.address,
-              Number(countBigInt)
-            );
-            const referralsData = await fetchReferrals(account.address);
-            const totalPendingRewards = stakesData.reduce(
-              (sum, stake) => sum + stake.pendingReward,
-              0n
-            );
-            const totalAccruedRewards = stakesData.reduce(
-              (sum, stake) => sum + stake.accruedReward,
-              0n
-            );
-            setStakes(stakesData);
-            setReferrals(referralsData);
-            setTotalPendingRewards(totalPendingRewards);
-            setTotalAccruedRewards(totalAccruedRewards);
-          } catch (err) {
-            console.error("DashboardHome.jsx: Failed to fetch data:", err);
-            toast.error(`Failed to fetch dashboard data at ${VITE_RPC_URL}`);
-            setStakes([]);
-            setReferrals([]);
-            setTotalPendingRewards(0n);
-            setTotalAccruedRewards(0n);
-          }
-        } else {
-          console.log(
-            "DashboardHome.jsx: Skipping data fetch - conditions not met",
-            {
-              address: account?.address,
-              isValidAddress: ethers.isAddress(account?.address),
-              stakeCountData,
-              isReadable: stakeCountData !== undefined,
-              isStakeCountLoading,
-            }
-          );
-          setStakes([]);
-          setReferrals([]);
-          setTotalPendingRewards(0n);
-          setTotalAccruedRewards(0n);
-        }
-      };
-
-      setTimeout(() => {
-        updateData();
+      const cachedData = getCachedData();
+      if (cachedData) {
+        console.log("DashboardHome.jsx: Using cached data");
+        setStakes(cachedData.stakes || []);
+        setReferrals(cachedData.referrals || []);
+        setTotalPendingRewards(
+          cachedData.stakes?.reduce(
+            (sum, stake) => sum + BigInt(stake.pendingReward || 0),
+            0n
+          ) || 0n
+        );
+        setTotalAccruedRewards(
+          cachedData.stakes?.reduce(
+            (sum, stake) => sum + BigInt(stake.accruedReward || 0),
+            0n
+          ) || 0n
+        );
+        setShowRefreshBanner(true);
         setIsLoading(false);
-      }, 1000);
-
-      const interval = setInterval(updateData, 10000);
-      return () => {
-        console.log("DashboardHome.jsx: Cleaning up interval");
-        clearInterval(interval);
-      };
+      } else {
+        refreshData();
+      }
     } catch (err) {
       setError(err);
       setIsLoading(false);
     }
-  }, [account, stakeCountData, isStakeCountLoading, refetchStakeCount]);
+  }, [
+    account,
+    stakeCountData,
+    isStakeCountLoading,
+    stakeCountError,
+    referralBonusError,
+  ]);
 
   // Copy referral link
   const handleCopyReferralLink = async () => {
@@ -743,13 +810,13 @@ export default function DashboardHome() {
   if (isLoading || isStakeCountLoading || isReferralBonusLoading) {
     return (
       <div className="flex items-center justify-center bg-slate-900 p-4 w-full min-h-screen">
-      <div className="animate-spin rounded-full h-8 w-8 sm:h-10 sm:w-10 border-t-4 border-cyan-600"></div>
-    </div>
+        <div className="animate-spin rounded-full h-8 w-8 sm:h-10 sm:w-10 border-t-4 border-cyan-600"></div>
+      </div>
     );
   }
 
   return (
-    <div className="px-4 sm:px-6 lg:px-8 py-8 w-full bg-slate-900 max-w-full min-w-0">
+    <div className="px-4 sm:px-6 lg:px-8 py-8 w-full bg-slate-900 max-w-full min-h-screen min-w-0">
       {isSuspended.isSuspended && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -761,14 +828,41 @@ export default function DashboardHome() {
           {isSuspended.reason || "Not provided"}.
         </motion.div>
       )}
-      <motion.h2
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="text-2xl sm:text-3xl font-bold text-slate-200 mb-8 font-geist"
-      >
-        Dashboard Overview
-      </motion.h2>
+      {showRefreshBanner && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="bg-slate-800/40 text-slate-200 p-3 rounded-md mb-4 font-geist-mono text-xs sm:text-sm flex items-center justify-between"
+        >
+          <span>Click Refresh to see the latest stake and reward data.</span>
+          <button
+            onClick={() => setShowRefreshBanner(false)}
+            className="text-slate-400 hover:text-cyan-600"
+          >
+            <X className="w-4 sm:w-5 h-4 sm:h-5" />
+          </button>
+        </motion.div>
+      )}
+      <div className="flex justify-between items-center mb-8">
+        <motion.h2
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="text-2xl sm:text-3xl font-bold text-slate-200 font-geist"
+        >
+          Dashboard Overview
+        </motion.h2>
+        <button
+          onClick={refreshData}
+          className="flex items-center justify-center px-3 py-1.5 bg-slate-800 text-cyan-600 border border-cyan-600 rounded-md hover:bg-slate-700 transition-all duration-300 text-xs sm:text-sm"
+          data-tooltip-id="refresh-tooltip"
+          data-tooltip-content="Refresh to fetch latest data"
+        >
+          <RefreshCw className="w-4 h-4 mr-1.5" />
+          Refresh
+        </button>
+      </div>
 
       {/* Cards */}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3 sm:gap-4 mb-8 max-w-full">
@@ -777,12 +871,19 @@ export default function DashboardHome() {
             icon: DollarSign,
             label: "Total Staked",
             value: `$${formatUSDT(totalStaked)}`,
+            nairaValue: `${(
+              Number(formatUSDT(totalStaked)) * USDT_RATE
+            ).toFixed(2)} NGN`,
             tooltip: "USDT staked in 5-day plan",
           },
           {
             icon: Gift,
             label: "Available Rewards",
             value: `$${formatUSDT(totalAccruedRewards + totalPendingRewards)}`,
+            nairaValue: `${(
+              Number(formatUSDT(totalAccruedRewards + totalPendingRewards)) *
+              USDT_RATE
+            ).toFixed(2)} NGN`,
             tooltip: "Rewards to claim or compound",
           },
           {
@@ -819,6 +920,11 @@ export default function DashboardHome() {
                 <p className="text-lg sm:text-xl font-bold text-white font-geist truncate">
                   {item.value}
                 </p>
+                {item.nairaValue && (
+                  <p className="text-slate-400 text-xs font-geist-mono truncate">
+                    {item.nairaValue}
+                  </p>
+                )}
               </div>
             </div>
             {item.modal && (
@@ -1197,6 +1303,12 @@ export default function DashboardHome() {
       />
       <Tooltip
         id="telegram-tooltip"
+        place="top"
+        className="bg-slate-800 text-cyan-600 text-xs sm:text-sm max-w-[200px] break-words z-50"
+        style={{ fontFamily: "Geist Mono" }}
+      />
+      <Tooltip
+        id="refresh-tooltip"
         place="top"
         className="bg-slate-800 text-cyan-600 text-xs sm:text-sm max-w-[200px] break-words z-50"
         style={{ fontFamily: "Geist Mono" }}

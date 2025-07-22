@@ -17,7 +17,12 @@ import BuyCrypto from "./userPages/BuyCrypto";
 // import TransactionStatus from "./components/TransactionStatus"; // New component
 import NotFound from "./pages/NotFound";
 import SendUSDTInstructions from "./userPages/SendUSDTInstructions";
+import TestWithdrawal from "./userPages/TestVerifyWithdrawal";
 import TransactionManagement from "./adminPages/TransactionManagement";
+import WithdrawCrypto from "./userPages/WithdrawCrypto";
+import WithdrawalManagement from "./adminPages/WithdrawalManagement";
+
+;
 
 // Validate environment variables
 const requiredEnvVars = {
@@ -123,13 +128,16 @@ export default function App() {
             <Route path="referrals" element={<Referrals />} />
             <Route path="rewards" element={<Rewards />} />
             <Route path="buy" element={<BuyCrypto />} />
+            <Route path="withdraw" element={<WithdrawCrypto />} />
+            <Route path="test" element={<TestWithdrawal />} />
             <Route path="instruction" element={<SendUSDTInstructions />} />
           </Route>
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminHome />} />
             <Route path="manage-pool" element={<ManagePool />} />
             <Route path="controls" element={<ContractControls />} />
-            <Route path="transactions" element={<TransactionManagement/>} />
+            <Route path="transactions" element={<TransactionManagement />} />
+            <Route path="withdraw" element={<WithdrawalManagement />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

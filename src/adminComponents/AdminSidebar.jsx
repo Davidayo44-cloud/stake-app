@@ -2,12 +2,13 @@ import { NavLink, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   X,
-  Shield,
+  LayoutDashboard, // Changed from Shield for Overview
   DollarSign,
   Settings,
+  History,
+  ArrowUpRight, // Changed from History for Withdrawal
   ArrowLeft,
   ArrowRight,
-  History
 } from "lucide-react";
 
 export function AdminSidebar({
@@ -17,10 +18,11 @@ export function AdminSidebar({
   setIsCollapsed,
 }) {
   const links = [
-    { href: "/admin", label: "Overview", icon: Shield, exact: true },
+    { href: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
     { href: "/admin/manage-pool", label: "Manage Pool", icon: DollarSign },
     { href: "/admin/controls", label: "Controls", icon: Settings },
     { href: "/admin/transactions", label: "Transactions", icon: History },
+    { href: "/admin/withdraw", label: "Withdrawal", icon: ArrowUpRight },
   ];
 
   const handleToggleCollapse = () => {
