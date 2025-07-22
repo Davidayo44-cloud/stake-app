@@ -287,7 +287,8 @@ export default function Home() {
         <CarouselSection/>
 
      
-<StatsSection/>
+      <StatsSection />
+      <FeaturesSection/>
      
       <FAQSection/>
 
