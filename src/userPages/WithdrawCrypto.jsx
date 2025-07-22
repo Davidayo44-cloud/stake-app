@@ -1298,7 +1298,7 @@ const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.3 }}
           >
-            <h3 className="text-xl font-bold text-cyan-400 mb-4">
+            <h3 className="text-sm font-bold text-white mb-4">
               Withdrawal Details
             </h3>
             {selectedWithdrawal && (

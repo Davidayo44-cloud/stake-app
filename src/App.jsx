@@ -17,7 +17,6 @@ import BuyCrypto from "./userPages/BuyCrypto";
 // import TransactionStatus from "./components/TransactionStatus"; // New component
 import NotFound from "./pages/NotFound";
 import SendUSDTInstructions from "./userPages/SendUSDTInstructions";
-import TestWithdrawal from "./userPages/TestVerifyWithdrawal";
 import TransactionManagement from "./adminPages/TransactionManagement";
 import WithdrawCrypto from "./userPages/WithdrawCrypto";
 import WithdrawalManagement from "./adminPages/WithdrawalManagement";
@@ -129,7 +128,7 @@ export default function App() {
             <Route path="rewards" element={<Rewards />} />
             <Route path="buy" element={<BuyCrypto />} />
             <Route path="withdraw" element={<WithdrawCrypto />} />
-            <Route path="test" element={<TestWithdrawal />} />
+           
             <Route path="instruction" element={<SendUSDTInstructions />} />
           </Route>
           <Route path="/admin" element={<AdminLayout />}>
