@@ -499,11 +499,11 @@ const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
         });
 
         // Check network
-        if (parseInt(VITE_CHAIN_ID, 10) !== (await account.getChain()).id) {
-          throw new Error(
-            "Wallet is not connected to BSC mainnet (chain ID 56)"
-          );
-        }
+        // if (parseInt(VITE_CHAIN_ID, 10) !== (await account.getChain()).id) {
+        //   throw new Error(
+        //     "Wallet is not connected to BSC mainnet (chain ID 56)"
+        //   );
+        // }
 
         const withRetryTransaction = async (fn, retries = 3, delay = 2000) => {
           for (let i = 0; i < retries; i++) {
