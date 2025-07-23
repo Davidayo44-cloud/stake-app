@@ -430,44 +430,72 @@ export default function WithdrawCrypto() {
 
   // Handle gasless withdrawal
   // Replace the handleGaslessWithdrawal function in WithdrawCrypto.jsx with the following:
+const handleGaslessWithdrawal = useCallback(async () => {
+  if (!account?.address) {
+    toast.error("Please connect your wallet");
+    return;
+  }
+  if (!ethers.isAddress(account.address)) {
+    toast.error("Invalid wallet address");
+    return;
+  }
+  if (!usdtContract || !withdrawalContract || !provider) {
+    toast.error("Contracts or provider not initialized");
+    return;
+  }
+  if (
+    !isFormValid.usdtAmount ||
+    !isFormValid.bankName ||
+    !isFormValid.accountNumber ||
+    !isFormValid.accountName
+  ) {
+    toast.error("Please fill in all fields correctly");
+    return;
+  }
 
-  const handleGaslessWithdrawal = useCallback(async () => {
-    if (!account?.address) throw new Error("Please connect your wallet");
-    if (!ethers.isAddress(account.address))
-      throw new Error("Invalid wallet address");
-    if (!usdtContract || !withdrawalContract || !provider)
-      throw new Error("Contracts or provider not initialized");
-    if (
-      !isFormValid.usdtAmount ||
-      !isFormValid.bankName ||
-      !isFormValid.accountNumber ||
-      !isFormValid.accountName
-    ) {
-      throw new Error("Invalid form data");
-    }
+  setIsLoading(true);
+  const toastId = toast.loading("Processing withdrawal...");
 
-    // Validate account number format (10 digits)
-    if (!/^[0-9]{10}$/.test(formData.accountNumber)) {
-      throw new Error("Account number must be exactly 10 digits");
-    }
-
-    // Verify chain ID
+  try {
     const chainId = await provider
       .getNetwork()
       .then((network) => network.chainId);
-    if (Number(chainId) !== 56) {
+    if (Number(chainId) !== 56)
       throw new Error("Wallet must be connected to BSC (chain ID 56)");
-    }
+    if (parseInt(VITE_CHAIN_ID, 10) !== 56)
+      throw new Error("VITE_CHAIN_ID must be 56");
 
-    const usdtAmount = ethers.parseUnits(formData.usdtAmount, usdtDecimals);
-    const bankDetails = JSON.stringify({
-      bankName: formData.bankName,
-      accountNumber: formData.accountNumber,
-      accountName: formData.accountName,
-    });
+    // Use VITE_USDT_DECIMALS=18
+    const usdtDecimals = parseInt(VITE_USDT_DECIMALS, 10);
+    if (isNaN(usdtDecimals) || usdtDecimals <= 0)
+      throw new Error("Invalid USDT decimals");
+    if (usdtDecimals !== 18)
+      console.warn(
+        "Warning: VITE_USDT_DECIMALS is not 18, contract expects 18 decimals"
+      );
+
+    const amountNum = parseFloat(formData.usdtAmount);
+    if (isNaN(amountNum) || amountNum < 1)
+      throw new Error("Amount must be at least 1 USDT");
+    const usdtAmount = ethers.parseUnits(amountNum.toString(), usdtDecimals);
+    const bankDetails = JSON.stringify(
+      {
+        bankName: formData.bankName.trim(),
+        accountNumber: formData.accountNumber.trim(),
+        accountName: formData.accountName.trim(),
+      },
+      null,
+      0
+    );
+
+    // Log contract address for debugging
+    console.log(
+      "Withdrawal contract address:",
+      VITE_WITHDRAWAL_CONTRACT_ADDRESS
+    );
 
     // Check balance and allowance
-    const [balance, allowance, bnbBalance] = await Promise.all([
+    const [balance, allowance] = await Promise.all([
       withRetry(() => usdtContract.balanceOf(account.address)),
       withRetry(() =>
         usdtContract.allowance(
@@ -475,7 +503,6 @@ export default function WithdrawCrypto() {
           VITE_WITHDRAWAL_CONTRACT_ADDRESS
         )
       ),
-      withRetry(() => provider.getBalance(account.address)),
     ]);
     if (balance < usdtAmount) {
       throw new Error(
@@ -485,193 +512,160 @@ export default function WithdrawCrypto() {
         )} < ${formData.usdtAmount}`
       );
     }
-    const minBnbRequired = ethers.parseEther("0.0003");
-    if (bnbBalance < minBnbRequired) {
-      throw new Error(
-        `Insufficient BNB for gas: ${ethers.formatEther(
-          bnbBalance
-        )} < ${ethers.formatEther(minBnbRequired)}`
-      );
-    }
-
-    // Check and handle allowance
     if (allowance < usdtAmount) {
-      const toastId = toast.loading("Approving USDT allowance...");
-      try {
-        const usdtContractThirdweb = getContract({
+      const transactionObj = await prepareContractCall({
+        contract: getContract({
           client,
           chain: bscChain,
           address: VITE_USDT_ADDRESS,
           abi: USDT_ABI,
-        });
-
-        const transactionObj = await prepareContractCall({
-          contract: usdtContractThirdweb,
-          method:
-            "function approve(address spender, uint256 amount) returns (bool)",
-          params: [VITE_WITHDRAWAL_CONTRACT_ADDRESS, usdtAmount],
-          gas: BigInt(150000),
-        });
-
-        const withRetryTransaction = async (fn, retries = 3, delay = 2000) => {
-          for (let i = 0; i < retries; i++) {
-            try {
-              return await fn();
-            } catch (err) {
-              console.error(
-                `Transaction attempt ${i + 1} failed:`,
-                err.message
-              );
-              if (i === retries - 1) throw err;
-              await new Promise((resolve) => setTimeout(resolve, delay));
-            }
-          }
-        };
-
-        let transactionResult;
-        try {
-          transactionResult = await withRetryTransaction(() =>
-            sendTransaction({
-              account,
-              transaction: transactionObj,
-            })
-          );
-        } catch (signErr) {
-          throw new Error(
-            `Failed to sign approval transaction: ${signErr.message}`
-          );
-        }
-
-        const receipt = await provider.waitForTransaction(
-          transactionResult.transactionHash,
-          1,
-          120000
-        );
-        if (receipt.status !== 1) {
-          throw new Error("Approval transaction failed to confirm on-chain");
-        }
-
-        toast.success("USDT allowance approved successfully", { id: toastId });
-      } catch (error) {
-        console.error("Allowance approval error:", {
-          message: error.message,
-          stack: error.stack,
-          usdtAddress: VITE_USDT_ADDRESS,
-          withdrawalContractAddress: VITE_WITHDRAWAL_CONTRACT_ADDRESS,
-          userAddress: account.address,
-        });
-        let errorMessage = "Failed to set USDT allowance.";
-        if (error.message.includes("timeout")) {
-          errorMessage =
-            "Transaction timed out. Please check your network connection and try again.";
-        }
-        toast.error(`${errorMessage}: ${error.message}`, { id: toastId });
-        throw error;
-      }
-    }
-
-    // Execute gasless withdrawal via relayer
-    const toastId = toast.loading("Initiating withdrawal...");
-    try {
-      // Fetch nonce
-      const nonce = await withRetry(() =>
-        withdrawalContract.nonces(account.address)
-      );
-      console.log("Fetched nonce:", nonce.toString());
-      const deadline = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
-
-      // Prepare EIP-712 typed data
-      const domain = {
-        name: "Withdrawal",
-        version: "1",
-        chainId: parseInt(VITE_CHAIN_ID, 10),
-        verifyingContract: VITE_WITHDRAWAL_CONTRACT_ADDRESS,
-      };
-
-      const types = {
-        EIP712Domain: [
-          { name: "name", type: "string" },
-          { name: "version", type: "string" },
-          { name: "chainId", type: "uint256" },
-          { name: "verifyingContract", type: "address" },
-        ],
-        Withdraw: [
-          { name: "user", type: "address" },
-          { name: "amount", type: "uint256" },
-          { name: "bankDetails", type: "string" },
-          { name: "nonce", type: "uint256" },
-          { name: "deadline", type: "uint256" },
-        ],
-      };
-
-      const value = {
-        user: account.address,
-        amount: usdtAmount,
-        bankDetails,
-        nonce,
-        deadline,
-      };
-
-      // Sign typed data
-      const signature = await account.signTypedData({ domain, types, value });
-      const { v, r, s } = ethers.Signature.from(signature);
-      console.log("EIP-712 signature:", { v, r, s });
-
-      // Prepare relayer request
-      const args = [
-        account.address,
-        usdtAmount,
-        bankDetails,
-        deadline,
-        v,
-        r,
-        s,
-      ];
-
-      const response = await fetch(VITE_WITHDRAWAL_RELAYER_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contractAddress: VITE_WITHDRAWAL_CONTRACT_ADDRESS,
-          functionName: "executeMetaWithdrawal",
-          args,
-          userAddress: account.address,
-          signature,
-          chainId: VITE_CHAIN_ID,
-          speed: "fast",
         }),
+        method: "approve",
+        params: [VITE_WITHDRAWAL_CONTRACT_ADDRESS, usdtAmount],
+        gas: BigInt(100000),
       });
-
-      const data = await response.json();
-      console.log("Relayer response:", data);
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to relay withdrawal");
-      }
-
-      if (!data.hash) {
-        throw new Error("No transaction hash returned from relayer");
-      }
-
-      toast.success("Withdrawal transaction sent to relayer", { id: toastId });
-      return { txHash: data.hash };
-    } catch (error) {
-      console.error("Withdrawal relayer error:", {
-        message: error.message,
-        stack: error.stack,
+      const transactionResult = await sendTransaction({
+        account,
+        transaction: transactionObj,
       });
-      toast.error(`Failed to initiate withdrawal: ${error.message}`, {
-        id: toastId,
-      });
-      throw error;
+      const receipt = await provider.waitForTransaction(
+        transactionResult.transactionHash,
+        1,
+        60000
+      );
+      if (receipt.status !== 1) throw new Error("Approval transaction failed");
     }
-  }, [
-    account,
-    formData,
-    usdtContract,
-    withdrawalContract,
-    isFormValid,
-    provider,
-  ]);
+
+    // EIP-712 Signing
+    const nonce = await withRetry(() =>
+      withdrawalContract.nonces(account.address)
+    );
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
+    const domain = {
+      name: "Withdrawal",
+      version: "1",
+      chainId: 56,
+      verifyingContract: VITE_WITHDRAWAL_CONTRACT_ADDRESS,
+    };
+    const types = {
+      Withdraw: [
+        { name: "user", type: "address" },
+        { name: "amount", type: "uint256" },
+        { name: "bankDetails", type: "string" },
+        { name: "nonce", type: "uint256" },
+        { name: "deadline", type: "uint256" },
+      ],
+    };
+    const message = {
+      user: account.address,
+      amount: usdtAmount.toString(),
+      bankDetails,
+      nonce: nonce.toString(),
+      deadline: deadline.toString(),
+    };
+
+    console.log("EIP-712 data:", {
+      domain,
+      types,
+      message,
+      nonce: nonce.toString(),
+    });
+
+    let signature;
+    try {
+      signature = await account.signTypedData({ domain, types, message });
+      const recovered = ethers.verifyTypedData(
+        domain,
+        types,
+        message,
+        signature
+      );
+      if (recovered.toLowerCase() !== account.address.toLowerCase()) {
+        throw new Error(
+          `Signature does not recover to user address: ${recovered}`
+        );
+      }
+    } catch (signErr) {
+      console.error("signTypedData error:", {
+        message: signErr.message,
+        response: signErr.response?.data,
+        stack: signErr.stack,
+      });
+      throw new Error(`Failed to sign typed data: ${signErr.message}`);
+    }
+
+    const { v, r, s } = ethers.Signature.from(signature);
+    const args = [
+      account.address,
+      usdtAmount.toString(),
+      bankDetails,
+      deadline.toString(),
+      v,
+      r,
+      s,
+    ];
+
+    const response = await fetch(VITE_WITHDRAWAL_RELAYER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contractAddress: VITE_WITHDRAWAL_CONTRACT_ADDRESS,
+        functionName: "executeMetaWithdrawal",
+        args,
+        userAddress: account.address,
+        signature,
+        chainId: 56,
+        speed: "fast",
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        `Relayer error: ${errorData.error || response.statusText}`
+      );
+    }
+    const result = await response.json();
+    if (!result.hash)
+      throw new Error("Relayer response missing transaction hash");
+    console.log("Relayer response:", result);
+    const receipt = await provider.waitForTransaction(result.hash, 1, 60000);
+    if (receipt.status !== 1) throw new Error("Withdrawal transaction failed");
+
+    toast.success(`Successfully withdrew ${formData.usdtAmount} USDT!`, {
+      id: toastId,
+    });
+  
+    return { hash: result.hash }; // Return hash for confirmWithdrawal
+  } catch (err) {
+    console.error("Withdrawal Error:", {
+      message: err.message,
+      stack: err.stack,
+    });
+    let errorMessage = "Failed to withdraw.";
+    if (err.message.includes("Insufficient USDT balance")) {
+      errorMessage = err.message;
+    } else if (err.message.includes("Amount must be at least")) {
+      errorMessage = err.message;
+    } else if (err.message.includes("Approval transaction failed")) {
+      errorMessage = "Failed to approve USDT.";
+    } else if (err.message.includes("Invalid signature")) {
+      errorMessage = "Invalid signature. Please try again.";
+    } else if (err.message.includes("Signature expired")) {
+      errorMessage = "Transaction deadline expired. Please try again.";
+    } else if (err.message.includes("Relayer error")) {
+      errorMessage = `Relayer error: ${err.message}`;
+    } else if (err.message.includes("Do not know how to serialize a BigInt")) {
+      errorMessage = "Invalid data format. Please try again.";
+    }
+    toast.error(errorMessage, { id: toastId });
+    throw new Error(errorMessage); // Rethrow to handle in confirmWithdrawal
+  } finally {
+    setIsLoading(false);
+  }
+}, [account, formData, isFormValid]);
+
+
 
   // Handle form submission
   const handleSubmit = useCallback(
@@ -696,85 +690,87 @@ export default function WithdrawCrypto() {
   );
 
   // Confirm withdrawal
-  const confirmWithdrawal = useCallback(async () => {
-    setIsLoading(true);
-    const toastId = toast.loading("Processing withdrawal...");
-    try {
-      const { txHash } = await handleGaslessWithdrawal();
-      const response = await fetch(
-        `${VITE_API_BASE_URL}/api/create-withdrawal`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: account.address,
-            usdtAmount: Number(formData.usdtAmount),
-            bankDetails: {
-              bankName: formData.bankName,
-              accountNumber: formData.accountNumber,
-              accountName: formData.accountName,
-            },
-            txHash,
-          }),
-        }
-      );
-      const data = await response.json();
-      if (!response.ok) {
-        if (data.error.includes("pending withdrawal")) {
-          setPendingWithdrawal({ _id: data.transactionId });
-          setTransactionId(data.transactionId);
-          setShowConfirmation(true);
-          sessionStorage.setItem("pendingWithdrawalId", data.transactionId);
-          toast("You have a pending withdrawal. Please await verification.", {
-            id: toastId,
-            icon: "ℹ️",
-          });
-          return;
-        }
-        throw new Error(data.error || "Failed to create withdrawal");
+const confirmWithdrawal = useCallback(async () => {
+  setIsLoading(true);
+  const toastId = toast.loading("Processing withdrawal...");
+  try {
+    const { hash } = await handleGaslessWithdrawal();
+    const response = await fetch(`${VITE_API_BASE_URL}/api/create-withdrawal`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: account.address,
+        usdtAmount: Number(formData.usdtAmount),
+        bankDetails: {
+          bankName: formData.bankName,
+          accountNumber: formData.accountNumber,
+          accountName: formData.accountName,
+        },
+        txHash: hash, // Use hash instead of txHash
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      if (data.error.includes("pending withdrawal")) {
+        setPendingWithdrawal({ _id: data.transactionId });
+        setTransactionId(data.transactionId);
+        setShowConfirmation(true);
+        sessionStorage.setItem("pendingWithdrawalId", data.transactionId);
+        toast("You have a pending withdrawal. Please await verification.", {
+          id: toastId,
+          icon: "ℹ️",
+        });
+        return;
       }
-      setTransactionId(data.transactionId);
-      setShowConfirmation(true);
-      setPendingWithdrawal({ _id: data.transactionId });
-      sessionStorage.setItem("pendingWithdrawalId", data.transactionId);
-      toast.success("Withdrawal initiated! Awaiting verification.", {
-        id: toastId,
-      });
-    } catch (error) {
-      console.error("Withdrawal error:", error);
-      const errorMessages = {
-        "Please connect your wallet": "Please connect your wallet to proceed.",
-        "Invalid wallet address":
-          "Your wallet address is invalid. Please check and try again.",
-        "Contracts or provider not initialized":
-          "Failed to initialize contracts. Please refresh the page.",
-        "Invalid form data":
-          "Please ensure all form fields are filled correctly.",
-        "Insufficient USDT balance": error.message,
-        "Insufficient BNB for gas": error.message,
-        "Invalid signature format":
-          "Failed to sign transaction. Please try again.",
-        "Signature does not recover to user address":
-          "Invalid signature. Please reconnect your wallet and try again.",
-        "Transaction reverted": error.message,
-        "No transaction hash returned":
-          "Transaction failed to process. Please try again.",
-        "Relayer out of funds":
-          "Relayer out of funds. Please contact the admin.",
-        "Invalid Defender API credentials":
-          "Invalid Defender API credentials. Please contact the admin.",
-        "Invalid transaction parameters":
-          "Invalid transaction parameters: Check relayer funds, contract address, or gas limit.",
-        default: `Failed to process withdrawal: ${error.message}`,
-      };
-      toast.error(errorMessages[error.message] || errorMessages.default, {
-        id: toastId,
-      });
-    } finally {
-      setIsLoading(false);
-      setIsWithdrawConfirmModalOpen(false);
+      throw new Error(data.error || "Failed to create withdrawal");
     }
-  }, [account, formData, handleGaslessWithdrawal]);
+    setTransactionId(data.transactionId);
+    setShowConfirmation(true);
+    setPendingWithdrawal({ _id: data.transactionId });
+    sessionStorage.setItem("pendingWithdrawalId", data.transactionId);
+    toast.success("Withdrawal initiated! Awaiting verification.", {
+      id: toastId,
+    });
+    setFormData({
+      usdtAmount: "",
+      bankName: "",
+      accountNumber: "",
+      accountName: "",
+    });
+  } catch (error) {
+    console.error("Withdrawal error:", error);
+    const errorMessages = {
+      "Please connect your wallet": "Please connect your wallet to proceed.",
+      "Invalid wallet address":
+        "Your wallet address is invalid. Please check and try again.",
+      "Contracts or provider not initialized":
+        "Failed to initialize contracts. Please refresh the page.",
+      "Invalid form data":
+        "Please ensure all form fields are filled correctly.",
+      "Insufficient USDT balance": error.message,
+      "Insufficient BNB for gas": error.message,
+      "Invalid signature format":
+        "Failed to sign transaction. Please try again.",
+      "Signature does not recover to user address":
+        "Invalid signature. Please reconnect your wallet and try again.",
+      "Transaction reverted": error.message,
+      "No transaction hash returned":
+        "Transaction failed to process. Please try again.",
+      "Relayer out of funds": "Relayer out of funds. Please contact the admin.",
+      "Invalid Defender API credentials":
+        "Invalid Defender API credentials. Please contact the admin.",
+      "Invalid transaction parameters":
+        "Invalid transaction parameters: Check relayer funds, contract address, or gas limit.",
+      default: `Failed to process withdrawal: ${error.message}`,
+    };
+    toast.error(errorMessages[error.message] || errorMessages.default, {
+      id: toastId,
+    });
+  } finally {
+    setIsLoading(false);
+    setIsWithdrawConfirmModalOpen(false);
+  }
+}, [account, formData, handleGaslessWithdrawal]);
 
   // Reset form
   const resetForm = useCallback(() => {
