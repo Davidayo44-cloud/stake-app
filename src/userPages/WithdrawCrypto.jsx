@@ -429,148 +429,225 @@ const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   };
 
   // Handle gasless withdrawal
-  const handleGaslessWithdrawal = useCallback(async () => {
-    if (!account?.address) throw new Error("Please connect your wallet");
-    if (!ethers.isAddress(account.address))
-      throw new Error("Invalid wallet address");
-    if (!usdtContract || !withdrawalContract || !provider)
-      throw new Error("Contracts or provider not initialized");
-    if (
-      !isFormValid.usdtAmount ||
-      !isFormValid.bankName ||
-      !isFormValid.accountNumber ||
-      !isFormValid.accountName
-    ) {
-      throw new Error("Invalid form data");
-    }
+  // Replace the handleGaslessWithdrawal function in WithdrawCrypto.jsx with the following:
 
-    const usdtAmount = ethers.parseUnits(formData.usdtAmount, usdtDecimals);
-    const bankDetails = JSON.stringify({
-      bankName: formData.bankName,
-      accountNumber: formData.accountNumber,
-      accountName: formData.accountName,
+const handleGaslessWithdrawal = useCallback(async () => {
+  if (!account?.address) throw new Error("Please connect your wallet");
+  if (!ethers.isAddress(account.address))
+    throw new Error("Invalid wallet address");
+  if (!usdtContract || !withdrawalContract || !provider)
+    throw new Error("Contracts or provider not initialized");
+  if (
+    !isFormValid.usdtAmount ||
+    !isFormValid.bankName ||
+    !isFormValid.accountNumber ||
+    !isFormValid.accountName
+  ) {
+    throw new Error("Invalid form data");
+  }
+
+  const usdtAmount = ethers.parseUnits(formData.usdtAmount, usdtDecimals);
+  const bankDetails = JSON.stringify({
+    bankName: formData.bankName,
+    accountNumber: formData.accountNumber,
+    accountName: formData.accountName,
+  });
+
+  // Check balance and allowance
+  const [balance, allowance, bnbBalance] = await Promise.all([
+    withRetry(() => usdtContract.balanceOf(account.address)),
+    withRetry(() =>
+      usdtContract.allowance(
+        account.address,
+        VITE_WITHDRAWAL_CONTRACT_ADDRESS
+      )
+    ),
+    withRetry(() => provider.getBalance(account.address)),
+  ]);
+  if (balance < usdtAmount) {
+    throw new Error(
+      `Insufficient USDT balance: ${ethers.formatUnits(
+        balance,
+        usdtDecimals
+      )} < ${formData.usdtAmount}`
+    );
+  }
+  const minBnbRequired = ethers.parseEther("0.0003");
+  if (bnbBalance < minBnbRequired) {
+    throw new Error(
+      `Insufficient BNB for gas: ${ethers.formatEther(
+        bnbBalance
+      )} < ${ethers.formatEther(minBnbRequired)}`
+    );
+  }
+
+  // Check and handle allowance
+  if (allowance < usdtAmount) {
+    const toastId = toast.loading("Approving USDT allowance...");
+    try {
+      const usdtContractThirdweb = getContract({
+        client,
+        chain: bscChain,
+        address: VITE_USDT_ADDRESS,
+        abi: USDT_ABI,
+      });
+
+      const transactionObj = await prepareContractCall({
+        contract: usdtContractThirdweb,
+        method:
+          "function approve(address spender, uint256 amount) returns (bool)",
+        params: [VITE_WITHDRAWAL_CONTRACT_ADDRESS, usdtAmount],
+        gas: BigInt(150000),
+      });
+
+      const withRetryTransaction = async (fn, retries = 3, delay = 2000) => {
+        for (let i = 0; i < retries; i++) {
+          try {
+            return await fn();
+          } catch (err) {
+            console.error(
+              `Transaction attempt ${i + 1} failed:`,
+              err.message
+            );
+            if (i === retries - 1) throw err;
+            await new Promise((resolve) => setTimeout(resolve, delay));
+          }
+        }
+      };
+
+      let transactionResult;
+      try {
+        transactionResult = await withRetryTransaction(() =>
+          sendTransaction({
+            account,
+            transaction: transactionObj,
+          })
+        );
+      } catch (signErr) {
+        throw new Error(
+          `Failed to sign approval transaction: ${signErr.message}`
+        );
+      }
+
+      const receipt = await provider.waitForTransaction(
+        transactionResult.transactionHash,
+        1,
+        120000
+      );
+      if (receipt.status !== 1) {
+        throw new Error("Approval transaction failed to confirm on-chain");
+      }
+
+      toast.success("USDT allowance approved successfully", { id: toastId });
+    } catch (error) {
+      console.error("Allowance approval error:", {
+        message: error.message,
+        stack: error.stack,
+        usdtAddress: VITE_USDT_ADDRESS,
+        withdrawalContractAddress: VITE_WITHDRAWAL_CONTRACT_ADDRESS,
+        userAddress: account.address,
+      });
+      let errorMessage = "Failed to set USDT allowance.";
+      if (error.message.includes("timeout")) {
+        errorMessage =
+          "Transaction timed out. Please check your network connection and try again.";
+      }
+      toast.error(`${errorMessage}: ${error.message}`, { id: toastId });
+      throw error;
+    }
+  }
+
+  // Execute gasless withdrawal via relayer
+  const toastId = toast.loading("Initiating withdrawal...");
+  try {
+    // Fetch nonce
+    const nonce = await withRetry(() => withdrawalContract.nonces(account.address));
+    const deadline = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
+
+    // Prepare EIP-712 typed data
+    const domain = {
+      name: "Withdrawal",
+      version: "1",
+      chainId: parseInt(VITE_CHAIN_ID, 10),
+      verifyingContract: VITE_WITHDRAWAL_CONTRACT_ADDRESS,
+    };
+
+    const types = {
+      Withdraw: [
+        { name: "user", type: "address" },
+        { name: "amount", type: "uint256" },
+        { name: "bankDetails", type: "string" },
+        { name: "nonce", type: "uint256" },
+        { name: "deadline", type: "uint256" },
+      ],
+    };
+
+    const value = {
+      user: account.address,
+      amount: usdtAmount,
+      bankDetails,
+      nonce,
+      deadline,
+    };
+
+    // Sign typed data
+    const signature = await account.signTypedData({ domain, types, value });
+    const { v, r, s } = ethers.Signature.from(signature);
+
+    // Prepare relayer request
+    const args = [
+      account.address,
+      usdtAmount,
+      bankDetails,
+      deadline,
+      v,
+      r,
+      s,
+    ];
+
+    const response = await fetch(VITE_WITHDRAWAL_RELAYER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contractAddress: VITE_WITHDRAWAL_CONTRACT_ADDRESS,
+        functionName: "executeMetaWithdrawal",
+        args,
+        userAddress: account.address,
+        signature,
+        chainId: VITE_CHAIN_ID,
+        speed: "fast",
+      }),
     });
 
-    // Check balance and allowance
-    const [balance, allowance, bnbBalance] = await Promise.all([
-      withRetry(() => usdtContract.balanceOf(account.address)),
-      withRetry(() =>
-        usdtContract.allowance(
-          account.address,
-          VITE_WITHDRAWAL_CONTRACT_ADDRESS
-        )
-      ),
-      withRetry(() => provider.getBalance(account.address)),
-    ]);
-    if (balance < usdtAmount) {
-      throw new Error(
-        `Insufficient USDT balance: ${ethers.formatUnits(
-          balance,
-          usdtDecimals
-        )} < ${formData.usdtAmount}`
-      );
-    }
-    const minBnbRequired = ethers.parseEther("0.0003");
-    if (bnbBalance < minBnbRequired) {
-      throw new Error(
-        `Insufficient BNB for gas: ${ethers.formatEther(
-          bnbBalance
-        )} < ${ethers.formatEther(minBnbRequired)}`
-      );
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to relay withdrawal");
     }
 
-    // Check and handle allowance
-    if (allowance < usdtAmount) {
-      const toastId = toast.loading("Approving USDT allowance...");
-      try {
-        const usdtContractThirdweb = getContract({
-          client,
-          chain: bscChain,
-          address: VITE_USDT_ADDRESS,
-          abi: USDT_ABI,
-        });
-
-        const transactionObj = await prepareContractCall({
-          contract: usdtContractThirdweb,
-          method:
-            "function approve(address spender, uint256 amount) returns (bool)",
-          params: [VITE_WITHDRAWAL_CONTRACT_ADDRESS, usdtAmount],
-          gas: BigInt(150000), // Increased gas limit
-        });
-
-        // Check network
-        // if (parseInt(VITE_CHAIN_ID, 10) !== (await account.getChain()).id) {
-        //   throw new Error(
-        //     "Wallet is not connected to BSC mainnet (chain ID 56)"
-        //   );
-        // }
-
-        const withRetryTransaction = async (fn, retries = 3, delay = 2000) => {
-          for (let i = 0; i < retries; i++) {
-            try {
-              return await fn();
-            } catch (err) {
-              console.error(
-                `Transaction attempt ${i + 1} failed:`,
-                err.message
-              );
-              if (i === retries - 1) throw err;
-              await new Promise((resolve) => setTimeout(resolve, delay));
-            }
-          }
-        };
-
-        let transactionResult;
-        try {
-          transactionResult = await withRetryTransaction(() =>
-            sendTransaction({
-              account,
-              transaction: transactionObj,
-            })
-          );
-        } catch (signErr) {
-          throw new Error(
-            `Failed to sign approval transaction: ${signErr.message}`
-          );
-        }
-
-        const receipt = await provider.waitForTransaction(
-          transactionResult.transactionHash,
-          1,
-          120000
-        ); // Increased timeout
-        if (receipt.status !== 1) {
-          throw new Error("Approval transaction failed to confirm on-chain");
-        }
-
-        toast.success("USDT allowance approved successfully", { id: toastId });
-      } catch (error) {
-        console.error("Allowance approval error:", {
-          message: error.message,
-          stack: error.stack,
-          usdtAddress: VITE_USDT_ADDRESS,
-          withdrawalContractAddress: VITE_WITHDRAWAL_CONTRACT_ADDRESS,
-          userAddress: account.address,
-        });
-        let errorMessage = "Failed to set USDT allowance.";
-        if (error.message.includes("timeout")) {
-          errorMessage =
-            "Transaction timed out. Please check your network connection and try again.";
-        }
-        toast.error(`${errorMessage}: ${error.message}`, { id: toastId });
-        throw error;
-      }
+    if (!data.hash) {
+      throw new Error("No transaction hash returned from relayer");
     }
 
-    // ... (rest of the function remains unchanged)
-  }, [
-    account,
-    formData,
-    usdtContract,
-    withdrawalContract,
-    isFormValid,
-    provider,
-  ]);
+    toast.success("Withdrawal transaction sent to relayer", { id: toastId });
+    return { txHash: data.hash };
+  } catch (error) {
+    console.error("Withdrawal relayer error:", {
+      message: error.message,
+      stack: error.stack,
+    });
+    toast.error(`Failed to initiate withdrawal: ${error.message}`, {
+      id: toastId,
+    });
+    throw error;
+  }
+}, [
+  account,
+  formData,
+  usdtContract,
+  withdrawalContract,
+  isFormValid,
+  provider,
+]);
 
   // Handle form submission
   const handleSubmit = useCallback(
