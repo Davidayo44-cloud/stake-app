@@ -476,7 +476,7 @@ const handleGaslessWithdrawal = useCallback(async () => {
 
     const amountNum = parseFloat(formData.usdtAmount);
     if (isNaN(amountNum) || amountNum < 2)
-      throw new Error("Amount must be at least 1 USDT");
+      throw new Error("Amount must be at least 2 USDT");
     const usdtAmount = ethers.parseUnits(amountNum.toString(), usdtDecimals);
     const bankDetails = JSON.stringify(
       {
